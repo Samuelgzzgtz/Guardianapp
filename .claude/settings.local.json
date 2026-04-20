@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew assembleDebug)",
+      "Bash(sed -i 's/Icons\\\\.Default\\\\.ExitToApp/Icons.AutoMirrored.Filled.ExitToApp/g' app/src/main/java/com/example/gab/ui/resident/ResidentHomeScreen.kt app/src/main/java/com/example/gab/ui/resident/ResidentProfileScreen.kt app/src/main/java/com/example/gab/ui/security/SecurityScreens.kt app/src/main/java/com/example/gab/ui/admin/AdminScreens.kt app/src/main/java/com/example/gab/ui/cleaning/CleaningScreens.kt)",
+      "Bash(sed -i 's/Icons\\\\.Default\\\\.Assignment/Icons.AutoMirrored.Filled.Assignment/g' app/src/main/java/com/example/gab/ui/resident/ResidentHomeScreen.kt app/src/main/java/com/example/gab/ui/admin/AdminScreens.kt)",
+      "Bash(sed -i 's/Icons\\\\.Default\\\\.DirectionsWalk/Icons.AutoMirrored.Filled.DirectionsWalk/g' app/src/main/java/com/example/gab/ui/security/SecurityScreens.kt)",
+      "Bash(adb devices *)",
+      "Bash($ADB devices *)",
+      "Bash($EMULATOR *)",
+      "Bash(C:/Users/PC/AppData/Local/Android/Sdk/emulator/emulator.exe -avd Pixel_6_Pro -no-snapshot-load)",
+      "Bash(echo \"Emulator launch initiated \\(PID: $!\\)\")",
+      "Bash(./gradlew installDebug)",
+      "Bash($ADB shell *)",
+      "Bash(C:/Users/PC/AppData/Local/Android/Sdk/platform-tools/adb.exe logcat *)",
+      "Bash(C:/Users/PC/AppData/Local/Android/Sdk/platform-tools/adb.exe shell *)",
+      "Bash(grep -iE \"^.{20,}E \")",
+      "Bash(C:/Users/PC/AppData/Local/Android/Sdk/platform-tools/adb.exe pull *)",
+      "Bash(powershell *)",
+      "Bash(C:/Users/PC/AppData/Local/Android/Sdk/platform-tools/adb.exe exec-out *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git config *)"
+    ]
+  }
+}
