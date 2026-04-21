@@ -1,7 +1,7 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package com.example.gab.ui.cleaning
 
-import androidx.compose.foundation.background
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,30 +14,37 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.gab.ui.cleaning.viewmodel.CleaningViewModel
 import com.example.gab.ui.common.*
 import com.example.gab.ui.navigation.AppUser
 import com.example.gab.ui.navigation.Routes
 import com.example.gab.ui.theme.*
 
-private data class CleaningTask(
-    val id: String,
-    val area: String,
-    val description: String,
-    val priority: String,
-    val time: String,
-    var done: Boolean = false
-)
-
 @Composable
 fun CleaningShell(user: AppUser, onLogout: () -> Unit) {
     val navController = rememberNavController()
+    val vm: CleaningViewModel = viewModel()
+    val context = LocalContext.current
+
+    LaunchedEffect(user.id) { vm.loadAll(user.id) }
+
+    val toastMsg by vm.toastMessage.collectAsStateWithLifecycle()
+    LaunchedEffect(toastMsg) {
+        toastMsg?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            vm.clearToast()
+        }
+    }
+
     val navItems = listOf(
         NavItem("Inicio",  Icons.Default.Home,             Routes.CLEANING_HOME),
         NavItem("Tareas",  Icons.Default.CleaningServices, Routes.CLEANING_TASKS),
@@ -51,17 +58,21 @@ fun CleaningShell(user: AppUser, onLogout: () -> Unit) {
         }
     ) {
         NavHost(navController = navController, startDestination = Routes.CLEANING_HOME) {
-            composable(Routes.CLEANING_HOME)  { CleaningHomeScreen(user) }
-            composable(Routes.CLEANING_TASKS) { CleaningTasksScreen() }
+            composable(Routes.CLEANING_HOME)  { CleaningHomeScreen(user, vm) }
+            composable(Routes.CLEANING_TASKS) { CleaningTasksScreen(vm) }
         }
     }
 }
 
 @Composable
-fun CleaningHomeScreen(user: AppUser) {
-    val allTasks = 8
-    val doneTasks = 3
-    val progress = doneTasks.toFloat() / allTasks
+fun CleaningHomeScreen(user: AppUser, vm: CleaningViewModel) {
+    val tareas    by vm.tareas.collectAsStateWithLifecycle()
+    val areas     by vm.areas.collectAsStateWithLifecycle()
+    val isLoading by vm.isLoading.collectAsStateWithLifecycle()
+
+    val totalTasks = tareas.size
+    val doneTasks  = tareas.count { it.estaCompletada }
+    val progress   = if (totalTasks > 0) doneTasks.toFloat() / totalTasks else 0f
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -69,8 +80,12 @@ fun CleaningHomeScreen(user: AppUser) {
         contentPadding = PaddingValues(vertical = 16.dp)
     ) {
         item {
-            Text("Hola, ${user.name}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Turno mañana · Zona A–D", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Hola, ${user.name.ifBlank { "Equipo" }}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Turno activo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (isLoading) {
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
         }
 
         item {
@@ -79,7 +94,7 @@ fun CleaningHomeScreen(user: AppUser) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Progreso del día", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                            Text("$doneTasks de $allTasks tareas completadas", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("$doneTasks de $totalTasks tareas completadas", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Text("${(progress * 100).toInt()}%", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = CleaningOrange)
                     }
@@ -96,26 +111,31 @@ fun CleaningHomeScreen(user: AppUser) {
 
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("Pendientes", "${allTasks - doneTasks}", Icons.Default.Pending,    StatusWarning,  Modifier.weight(1f))
-                StatCard("Completadas", "$doneTasks",             Icons.Default.CheckCircle, StatusSuccess, Modifier.weight(1f))
+                StatCard("Pendientes",  "${totalTasks - doneTasks}", Icons.Default.Pending,     StatusWarning, Modifier.weight(1f))
+                StatCard("Completadas", "$doneTasks",                Icons.Default.CheckCircle,  StatusSuccess, Modifier.weight(1f))
             }
         }
 
-        item { SectionHeader("Zonas asignadas hoy") }
-        items(
-            listOf(
-                Triple("Vestíbulo principal",  "Hecho",      StatusSuccess),
-                Triple("Escaleras Bloque A-B", "En proceso", StatusInfo),
-                Triple("Parqueadero",           "Pendiente",  StatusWarning),
-                Triple("Zona de reciclaje",     "Pendiente",  StatusWarning),
-            )
-        ) { (zona, status, color) ->
-            GuardianCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CleaningServices, null, tint = CleaningOrange, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text(zona, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    StatusChip(status, color)
+        if (areas.isNotEmpty()) {
+            item { SectionHeader("Zonas asignadas") }
+            items(areas) { area ->
+                val (statusLabel, statusColor) = when (area.estatus) {
+                    "listo"    -> "Hecho"      to StatusSuccess
+                    "en_curso" -> "En proceso" to StatusInfo
+                    else       -> "Pendiente"  to StatusWarning
+                }
+                GuardianCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CleaningServices, null, tint = CleaningOrange, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(area.nombre, style = MaterialTheme.typography.bodyMedium)
+                            area.sector?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        StatusChip(statusLabel, statusColor)
+                    }
                 }
             }
         }
@@ -123,25 +143,16 @@ fun CleaningHomeScreen(user: AppUser) {
 }
 
 @Composable
-fun CleaningTasksScreen() {
-    val tasks = remember {
-        mutableStateListOf(
-            CleaningTask("T01", "Vestíbulo",   "Barrer y trapear entrada principal",    "Alta",  "07:00", done = true),
-            CleaningTask("T02", "Escaleras A", "Limpieza completa escaleras Bloque A",  "Alta",  "07:30", done = true),
-            CleaningTask("T03", "Ascensor",    "Desinfectar paredes y suelo ascensor",  "Media", "08:00", done = true),
-            CleaningTask("T04", "Escaleras B", "Limpieza completa escaleras Bloque B",  "Alta",  "08:30"),
-            CleaningTask("T05", "Parqueadero", "Barrida zona de parqueo",               "Media", "09:30"),
-            CleaningTask("T06", "Zona verde",  "Recogida de basura zona jardines",      "Baja",  "10:30"),
-            CleaningTask("T07", "Reciclaje",   "Organizar puntos de reciclaje",         "Media", "11:00"),
-            CleaningTask("T08", "Piscina",     "Limpieza área piscina y vestidores",    "Baja",  "12:00"),
-        )
-    }
+fun CleaningTasksScreen(vm: CleaningViewModel) {
+    val tareas    by vm.tareas.collectAsStateWithLifecycle()
+    val isLoading by vm.isLoading.collectAsStateWithLifecycle()
+
     var filterDone by remember { mutableStateOf<Boolean?>(null) }
 
     val filtered = when (filterDone) {
-        true  -> tasks.filter { it.done }
-        false -> tasks.filter { !it.done }
-        null  -> tasks.toList()
+        true  -> tareas.filter { it.estaCompletada }
+        false -> tareas.filter { !it.estaCompletada }
+        null  -> tareas
     }
 
     LazyColumn(
@@ -157,10 +168,21 @@ fun CleaningTasksScreen() {
                 FilterChip(selected = filterDone == false, onClick = { filterDone = false }, label = { Text("Pendientes") })
                 FilterChip(selected = filterDone == true,  onClick = { filterDone = true  }, label = { Text("Hechas") })
             }
+            if (isLoading) {
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
         }
 
-        items(filtered, key = { it.id }) { task ->
-            val idx = tasks.indexOfFirst { it.id == task.id }
+        if (tareas.isEmpty() && !isLoading) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text("No hay tareas asignadas para hoy", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        items(filtered, key = { it.id ?: it.titulo }) { tarea ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -171,30 +193,36 @@ fun CleaningTasksScreen() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Checkbox(
-                        checked = task.done,
-                        onCheckedChange = { if (idx >= 0) tasks[idx] = tasks[idx].copy(done = it) },
+                        checked = tarea.estaCompletada,
+                        onCheckedChange = { checked ->
+                            tarea.id?.let { vm.toggleTarea(it, checked) }
+                        },
                         colors = CheckboxDefaults.colors(checkedColor = CleaningOrange)
                     )
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
-                        val priorityColor = when (task.priority) { "Alta" -> StatusDanger; "Media" -> StatusWarning; else -> StatusInfo }
+                        val priorityColor = when (tarea.prioridad) { "alta" -> StatusDanger; else -> StatusWarning }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
-                                task.area,
+                                tarea.titulo,
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Medium,
-                                textDecoration = if (task.done) TextDecoration.LineThrough else null,
-                                color = if (task.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                                textDecoration = if (tarea.estaCompletada) TextDecoration.LineThrough else null,
+                                color = if (tarea.estaCompletada) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                             )
-                            StatusChip(task.priority, priorityColor)
+                            StatusChip(tarea.prioridad, priorityColor)
                         }
-                        Text(
-                            task.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textDecoration = if (task.done) TextDecoration.LineThrough else null
-                        )
-                        Text("Hora: ${task.time}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        tarea.area?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textDecoration = if (tarea.estaCompletada) TextDecoration.LineThrough else null
+                            )
+                        }
+                        tarea.horarioSlot?.let {
+                            Text("Hora: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }

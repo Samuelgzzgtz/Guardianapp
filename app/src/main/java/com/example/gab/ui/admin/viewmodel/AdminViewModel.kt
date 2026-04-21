@@ -1,0 +1,154 @@
+package com.example.gab.ui.admin.viewmodel
+
+import android.app.Application
+import android.util.Log
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.gab.data.model.*
+import com.example.gab.data.repository.AdminRepository
+import com.example.gab.data.repository.AuthRepository
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+
+sealed class CreateUserState {
+    object Idle    : CreateUserState()
+    object Loading : CreateUserState()
+    object Success : CreateUserState()
+    data class Error(val message: String) : CreateUserState()
+}
+
+class AdminViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val repo     = AdminRepository()
+    private val authRepo = AuthRepository(application)
+
+    private val _stats        = MutableStateFlow(DashboardStats())
+    val stats: StateFlow<DashboardStats> = _stats.asStateFlow()
+
+    private val _usuarios     = MutableStateFlow<List<Usuario>>(emptyList())
+    val usuarios: StateFlow<List<Usuario>> = _usuarios.asStateFlow()
+
+    private val _reportes     = MutableStateFlow<List<Reporte>>(emptyList())
+    val reportes: StateFlow<List<Reporte>> = _reportes.asStateFlow()
+
+    private val _reservas     = MutableStateFlow<List<Reserva>>(emptyList())
+    val reservas: StateFlow<List<Reserva>> = _reservas.asStateFlow()
+
+    private val _unidades     = MutableStateFlow<List<Unidad>>(emptyList())
+    val unidades: StateFlow<List<Unidad>> = _unidades.asStateFlow()
+
+    private val _unidadesConEstatus = MutableStateFlow<List<UnidadConEstatus>>(emptyList())
+    val unidadesConEstatus: StateFlow<List<UnidadConEstatus>> = _unidadesConEstatus.asStateFlow()
+
+    private val _morosos      = MutableStateFlow<List<MorosoRow>>(emptyList())
+    val morosos: StateFlow<List<MorosoRow>> = _morosos.asStateFlow()
+
+    private val _cuotasUsuario = MutableStateFlow<List<Cuota>>(emptyList())
+    val cuotasUsuario: StateFlow<List<Cuota>> = _cuotasUsuario.asStateFlow()
+
+    private val _isLoading    = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _toastMessage = MutableStateFlow<String?>(null)
+    val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
+
+    private val _createState  = MutableStateFlow<CreateUserState>(CreateUserState.Idle)
+    val createState: StateFlow<CreateUserState> = _createState.asStateFlow()
+
+    fun loadAll() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            repo.getEstadisticas().onSuccess { _stats.value    = it }
+            repo.getUsuarios().onSuccess     { _usuarios.value = it }
+            repo.getReportes().onSuccess     { _reportes.value = it }
+            repo.getReservas().onSuccess     { _reservas.value = it }
+            repo.getUnidades().onSuccess           { _unidades.value          = it }
+            repo.getUnidadesConEstatus().onSuccess { _unidadesConEstatus.value = it }
+            repo.getMorosos().onSuccess      { _morosos.value  = it }
+            _isLoading.value = false
+        }
+    }
+
+    fun filtrarUsuarios(rol: Int?) {
+        viewModelScope.launch {
+            repo.getUsuarios(rol).onSuccess { _usuarios.value = it }
+        }
+    }
+
+    fun actualizarRol(userId: Int, rolId: Int) {
+        viewModelScope.launch {
+            repo.actualizarRolUsuario(userId, rolId)
+                .onSuccess { _toastMessage.value = "Rol actualizado"; repo.getUsuarios().onSuccess { _usuarios.value = it } }
+                .onFailure { _toastMessage.value = "Error: ${it.message}" }
+        }
+    }
+
+    fun actualizarEstatusReporte(reporteId: Int, estatus: String) {
+        viewModelScope.launch {
+            repo.actualizarEstatusReporte(reporteId, estatus)
+                .onSuccess { _toastMessage.value = "Reporte → $estatus"; repo.getReportes().onSuccess { _reportes.value = it } }
+                .onFailure { _toastMessage.value = "Error: ${it.message}" }
+        }
+    }
+
+    fun crearUnidad(numero: String, torre: String?, tipo: String) {
+        viewModelScope.launch {
+            repo.crearUnidad(numero, torre, tipo)
+                .onSuccess { _toastMessage.value = "Unidad $numero creada"; repo.getUnidades().onSuccess { _unidades.value = it } }
+                .onFailure { _toastMessage.value = "Error: ${it.message}" }
+        }
+    }
+
+    fun darDeBajaUnidad(unidadId: Int, numero: String) {
+        viewModelScope.launch {
+            if (repo.tieneCuotasPendientes(unidadId).getOrDefault(false)) {
+                _toastMessage.value = "No se puede dar de baja: hay cuotas pendientes"; return@launch
+            }
+            repo.darDeBajaUnidad(unidadId)
+                .onSuccess { _toastMessage.value = "Unidad $numero dada de baja"; repo.getUnidades().onSuccess { _unidades.value = it } }
+                .onFailure { _toastMessage.value = "Error: ${it.message}" }
+        }
+    }
+
+    fun asignarResidente(userId: Int, unidadId: Int?) {
+        viewModelScope.launch {
+            repo.asignarResidente(userId, unidadId)
+                .onSuccess {
+                    _toastMessage.value = if (unidadId != null) "Residente asignado" else "Asignación removida"
+                    repo.getUsuarios().onSuccess { _usuarios.value = it }
+                }
+                .onFailure { _toastMessage.value = "Error: ${it.message}" }
+        }
+    }
+
+    fun crearUsuario(nombre: String, apellido: String, email: String, password: String, rolId: Int, unidadId: Int?) {
+        viewModelScope.launch {
+            _createState.value = CreateUserState.Loading
+            val nombreCompleto = "$nombre $apellido".trim()
+            authRepo.createUser(nombreCompleto, email, password, rolId, unidadId)
+                .onSuccess {
+                    _createState.value = CreateUserState.Success
+                    _toastMessage.value = "Usuario $nombreCompleto creado"
+                    repo.getUsuarios().onSuccess           { _usuarios.value          = it }
+                    repo.getUnidadesConEstatus().onSuccess { _unidadesConEstatus.value = it }
+                }
+                .onFailure { Log.e("AdminVM", "crearUsuario error", it); _createState.value = CreateUserState.Error(it.message ?: "Error al crear usuario") }
+        }
+    }
+
+    fun desactivarUsuario(userId: Int, nombre: String) {
+        viewModelScope.launch {
+            repo.deleteUsuario(userId)
+                .onSuccess { _toastMessage.value = "$nombre desactivado"; repo.getUsuarios().onSuccess { _usuarios.value = it } }
+                .onFailure { _toastMessage.value = "Error: ${it.message}" }
+        }
+    }
+
+    fun resetCreateState() { _createState.value = CreateUserState.Idle }
+
+    fun loadCuotasUsuario(userId: Int) {
+        viewModelScope.launch { repo.getCuotasPorUsuario(userId).onSuccess { _cuotasUsuario.value = it } }
+    }
+
+    fun clearToast() { _toastMessage.value = null }
+}

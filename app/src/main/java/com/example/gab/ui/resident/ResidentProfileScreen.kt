@@ -62,7 +62,7 @@ fun ResidentProfileScreen(user: AppUser, onLogout: () -> Unit) {
                 Spacer(Modifier.height(12.dp))
                 InfoRow(Icons.Default.Person, "Nombre completo", user.name)
                 InfoRow(Icons.Default.Home, "Apartamento", user.apartment.ifBlank { "—" })
-                InfoRow(Icons.Default.Phone, "Teléfono", "+57 310 000 0000")
+                InfoRow(Icons.Default.Phone, "Teléfono", "+52 310 000 0000")
                 InfoRow(Icons.Default.Email, "Correo", "residente@guardianapp.co")
             }
         }

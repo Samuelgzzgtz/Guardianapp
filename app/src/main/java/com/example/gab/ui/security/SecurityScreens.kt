@@ -1,6 +1,7 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package com.example.gab.ui.security
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,26 +13,43 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.gab.data.model.Reporte
+import com.example.gab.data.model.Usuario
 import com.example.gab.ui.common.*
 import com.example.gab.ui.navigation.AppUser
 import com.example.gab.ui.navigation.Routes
+import com.example.gab.ui.security.viewmodel.SecurityViewModel
 import com.example.gab.ui.theme.*
-
-private data class Visitor(val name: String, val apt: String, val time: String, val status: String)
-private data class Incident(val id: String, val title: String, val location: String, val priority: String, val time: String)
 
 @Composable
 fun SecurityShell(user: AppUser, onLogout: () -> Unit) {
     val navController = rememberNavController()
+    val vm: SecurityViewModel = viewModel()
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) { vm.loadAll() }
+
+    val toastMsg by vm.toastMessage.collectAsStateWithLifecycle()
+    LaunchedEffect(toastMsg) {
+        toastMsg?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            vm.clearToast()
+        }
+    }
+
     val navItems = listOf(
-        NavItem("Inicio",      Icons.Default.Home,     Routes.SECURITY_HOME),
-        NavItem("Visitantes",  Icons.Default.PeopleAlt, Routes.SECURITY_VISITORS),
-        NavItem("Incidentes",  Icons.Default.Warning,  Routes.SECURITY_INCIDENTS),
+        NavItem("Inicio",     Icons.Default.Home,      Routes.SECURITY_HOME),
+        NavItem("Accesos",    Icons.Default.PeopleAlt, Routes.SECURITY_VISITORS),
+        NavItem("Incidentes", Icons.Default.Warning,   Routes.SECURITY_INCIDENTS),
     )
     AppShell(
         navController = navController,
@@ -42,83 +60,82 @@ fun SecurityShell(user: AppUser, onLogout: () -> Unit) {
         }
     ) {
         NavHost(navController = navController, startDestination = Routes.SECURITY_HOME) {
-            composable(Routes.SECURITY_HOME)      { SecurityHomeScreen(user) }
-            composable(Routes.SECURITY_VISITORS)  { SecurityVisitorsScreen() }
-            composable(Routes.SECURITY_INCIDENTS) { SecurityIncidentsScreen() }
+            composable(Routes.SECURITY_HOME)      { SecurityHomeScreen(user, vm, navController) }
+            composable(Routes.SECURITY_VISITORS)  { SecurityVisitorsScreen(user, vm) }
+            composable(Routes.SECURITY_INCIDENTS) { SecurityIncidentsScreen(user, vm) }
         }
     }
 }
 
 @Composable
-fun SecurityHomeScreen(user: AppUser) {
+fun SecurityHomeScreen(user: AppUser, vm: SecurityViewModel, navController: NavController) {
+    val accesoLog  by vm.accesoLog.collectAsStateWithLifecycle()
+    val residentes by vm.residentes.collectAsStateWithLifecycle()
+    val isLoading  by vm.isLoading.collectAsStateWithLifecycle()
+
+    val entradas       = accesoLog.count { it.direccion == "ENTRADA" }
+    val salidas        = accesoLog.count { it.direccion == "SALIDA" }
+    val ultimosEventos = accesoLog.takeLast(5).reversed()
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(vertical = 16.dp)
     ) {
         item {
-            Text("Bienvenido, ${user.name}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Bienvenido, ${user.name.ifBlank { "Guardia" }}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text("Turno activo · Puesto principal", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-
-        item {
-            GuardianCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier.size(12.dp).also {
-                            androidx.compose.foundation.layout.Box(it) {}
-                        }
-                    )
-                    Icon(Icons.Default.Circle, null, tint = StatusSuccess, modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Column {
-                        Text("Estado del turno", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("ACTIVO – desde las 06:00", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = StatusSuccess)
-                    }
-                    Spacer(Modifier.weight(1f))
-                    Button(onClick = {}, colors = ButtonDefaults.buttonColors(containerColor = StatusDanger)) {
-                        Text("Fin turno")
-                    }
-                }
+            if (isLoading) {
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
         }
 
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("Visitantes hoy", "12", Icons.Default.PeopleAlt, SecurityGreen, Modifier.weight(1f))
-                StatCard("Incidentes", "2",  Icons.Default.Warning,   StatusWarning,  Modifier.weight(1f))
+                StatCard("Entradas hoy", "$entradas", Icons.AutoMirrored.Filled.Login,  SecurityGreen, Modifier.weight(1f))
+                StatCard("Salidas hoy",  "$salidas",  Icons.AutoMirrored.Filled.Logout, StatusWarning, Modifier.weight(1f))
             }
         }
 
         item {
             SectionHeader("Acciones rápidas")
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                QuickActionButton(Icons.Default.PersonAdd, "Registrar visita", SecurityGreen, {}, Modifier.weight(1f))
-                QuickActionButton(Icons.Default.Report,    "Incidente",        StatusDanger,  {}, Modifier.weight(1f))
-                QuickActionButton(Icons.AutoMirrored.Filled.DirectionsWalk, "Ronda",       StatusInfo,    {}, Modifier.weight(1f))
+                QuickActionButton(
+                    icon    = Icons.Default.PersonAdd,
+                    label   = "Registrar acceso",
+                    tint    = SecurityGreen,
+                    onClick = { navController.navigate(Routes.SECURITY_VISITORS) },
+                    modifier = Modifier.weight(1f)
+                )
+                QuickActionButton(
+                    icon    = Icons.Default.Report,
+                    label   = "Incidente",
+                    tint    = StatusDanger,
+                    onClick = { navController.navigate(Routes.SECURITY_INCIDENTS) },
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
 
-        item { SectionHeader("Últimos eventos") }
-        items(
-            listOf(
-                Triple("Visitante autorizado: Luis Mora → Apto 2A", "09:45", "visitor"),
-                Triple("Ronda completada – Sector Norte",           "08:30", "patrol"),
-                Triple("Incidente: Persona sospechosa Bloque C",    "07:15", "incident"),
-            )
-        ) { (msg, time, type) ->
-            GuardianCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val (icon, color) = when (type) {
-                        "visitor"  -> Icons.Default.PeopleAlt to SecurityGreen
-                        "patrol"   -> Icons.AutoMirrored.Filled.DirectionsWalk to StatusInfo
-                        else       -> Icons.Default.Warning to StatusDanger
-                    }
-                    Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(msg, style = MaterialTheme.typography.bodyMedium)
-                        Text(time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (ultimosEventos.isNotEmpty()) {
+            item { SectionHeader("Últimos eventos") }
+            items(ultimosEventos) { log ->
+                val nombre    = residentes.find { it.id == log.fkResidente }?.nombre ?: "Residente #${log.fkResidente ?: "—"}"
+                val isEntrada = log.direccion == "ENTRADA"
+                GuardianCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (isEntrada) Icons.AutoMirrored.Filled.Login else Icons.AutoMirrored.Filled.Logout,
+                            null,
+                            tint = if (isEntrada) SecurityGreen else StatusWarning,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("$nombre – ${log.direccion}", style = MaterialTheme.typography.bodyMedium)
+                            Text(log.horaRegistro ?: "—", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
@@ -127,16 +144,11 @@ fun SecurityHomeScreen(user: AppUser) {
 }
 
 @Composable
-fun SecurityVisitorsScreen() {
-    val visitors = remember {
-        listOf(
-            Visitor("Luis Mora",     "2A", "09:45", "Dentro"),
-            Visitor("Sara Gómez",    "5C", "09:20", "Salió"),
-            Visitor("Pedro Ríos",    "1B", "08:55", "Dentro"),
-            Visitor("Ana Castillo",  "3D", "08:30", "Salió"),
-            Visitor("Miguel Torres", "4A", "07:50", "Salió"),
-        )
-    }
+fun SecurityVisitorsScreen(user: AppUser, vm: SecurityViewModel) {
+    val accesoLog  by vm.accesoLog.collectAsStateWithLifecycle()
+    val residentes by vm.residentes.collectAsStateWithLifecycle()
+    val isLoading  by vm.isLoading.collectAsStateWithLifecycle()
+
     var showRegisterDialog by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
@@ -146,21 +158,36 @@ fun SecurityVisitorsScreen() {
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
             item {
-                Text("Registro de Visitantes", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Registro de Accesos", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                if (isLoading) {
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
             }
-            items(visitors) { visitor ->
+
+            if (accesoLog.isEmpty() && !isLoading) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        Text("Sin registros de acceso aún", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+
+            items(accesoLog.reversed()) { log ->
+                val nombre    = residentes.find { it.id == log.fkResidente }?.nombre ?: "Residente #${log.fkResidente ?: "—"}"
+                val isEntrada = log.direccion == "ENTRADA"
                 GuardianCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AvatarCircle(
-                            initials = visitor.name.split(" ").take(2).mapNotNull { it.firstOrNull()?.toString() }.joinToString(""),
-                            color = if (visitor.status == "Dentro") SecurityGreen else TextDisabled
+                            initials = nombre.split(" ").take(2).mapNotNull { it.firstOrNull()?.toString() }.joinToString(""),
+                            color    = if (isEntrada) SecurityGreen else StatusWarning
                         )
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(visitor.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                            Text("Apto ${visitor.apt} · Entrada: ${visitor.time}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(nombre, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            Text("${log.direccion} · ${log.horaRegistro ?: "—"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        StatusChip(visitor.status, if (visitor.status == "Dentro") SecurityGreen else TextDisabled)
+                        StatusChip(log.direccion, if (isEntrada) SecurityGreen else StatusWarning)
                     }
                 }
             }
@@ -176,39 +203,95 @@ fun SecurityVisitorsScreen() {
     }
 
     if (showRegisterDialog) {
-        RegisterVisitorDialog(onDismiss = { showRegisterDialog = false })
+        RegisterAccessDialog(
+            residentes = residentes,
+            onSearch   = { vm.buscarResidente(it) },
+            onDismiss  = { showRegisterDialog = false },
+            onConfirm  = { residente, direccion ->
+                vm.registrarAcceso(user.id, residente, direccion)
+                showRegisterDialog = false
+            }
+        )
     }
 }
 
 @Composable
-private fun RegisterVisitorDialog(onDismiss: () -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var apt by remember { mutableStateOf("") }
-    var doc by remember { mutableStateOf("") }
+private fun RegisterAccessDialog(
+    residentes: List<Usuario>,
+    onSearch: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: (residente: Usuario, direccion: String) -> Unit
+) {
+    var query     by remember { mutableStateOf("") }
+    var selected  by remember { mutableStateOf<Usuario?>(null) }
+    var direccion by remember { mutableStateOf("ENTRADA") }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Registrar visitante") },
+        title = { Text("Registrar acceso") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre completo") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(value = doc,  onValueChange = { doc = it },  label = { Text("Documento de identidad") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(value = apt,  onValueChange = { apt = it },  label = { Text("Apartamento a visitar") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it; onSearch(it) },
+                    label = { Text("Buscar residente") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                if (residentes.isNotEmpty()) {
+                    LazyColumn(modifier = Modifier.heightIn(max = 160.dp)) {
+                        items(residentes.take(5)) { r ->
+                            val isSelected = selected?.id == r.id
+                            Surface(
+                                onClick = { selected = r },
+                                color  = if (isSelected) SecurityGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface,
+                                shape  = MaterialTheme.shapes.small
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(r.nombre, modifier = Modifier.weight(1f))
+                                    if (isSelected) Icon(Icons.Default.CheckCircle, null, tint = SecurityGreen, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Text("Sin residentes encontrados", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("ENTRADA", "SALIDA").forEach { dir ->
+                        FilterChip(
+                            selected = direccion == dir,
+                            onClick  = { direccion = dir },
+                            label    = { Text(dir) },
+                            colors   = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = if (dir == "ENTRADA") SecurityGreen else StatusWarning,
+                                selectedLabelColor     = Color.White
+                            )
+                        )
+                    }
+                }
             }
         },
-        confirmButton = { Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = SecurityGreen)) { Text("Registrar") } },
+        confirmButton = {
+            Button(
+                onClick  = { selected?.let { onConfirm(it, direccion) } },
+                enabled  = selected != null,
+                colors   = ButtonDefaults.buttonColors(containerColor = SecurityGreen)
+            ) { Text("Registrar") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
 }
 
 @Composable
-fun SecurityIncidentsScreen() {
-    val incidents = remember {
-        listOf(
-            Incident("INC-012", "Persona sospechosa en Bloque C", "Bloque C – P2", "Alta",  "07:15"),
-            Incident("INC-011", "Daño a vehículo en parqueadero",  "Parqueadero B", "Media", "Ayer 22:40"),
-            Incident("INC-010", "Ruido excesivo vecinos",          "Bloque A – P3", "Baja",  "Ayer 23:10"),
-        )
-    }
+fun SecurityIncidentsScreen(user: AppUser, vm: SecurityViewModel) {
+    val incidentes by vm.incidentes.collectAsStateWithLifecycle()
+    val isLoading  by vm.isLoading.collectAsStateWithLifecycle()
+
     var showNewIncident by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
@@ -217,28 +300,24 @@ fun SecurityIncidentsScreen() {
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
-            item { Text("Incidentes", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
-            items(incidents) { inc ->
-                GuardianCard {
-                    Row(verticalAlignment = Alignment.Top) {
-                        val priorityColor = when (inc.priority) {
-                            "Alta"  -> StatusDanger
-                            "Media" -> StatusWarning
-                            else    -> StatusInfo
-                        }
-                        Icon(Icons.Default.Warning, null, tint = priorityColor, modifier = Modifier.size(20.dp).padding(top = 2.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(inc.id, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                StatusChip(inc.priority, priorityColor)
-                            }
-                            Spacer(Modifier.height(2.dp))
-                            Text(inc.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                            Text("${inc.location} · ${inc.time}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+            item {
+                Text("Incidentes", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                if (isLoading) {
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+
+            if (incidentes.isEmpty() && !isLoading) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        Text("Sin incidentes registrados", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+            }
+
+            items(incidentes.reversed()) { inc ->
+                IncidenteCard(inc)
             }
         }
 
@@ -252,38 +331,87 @@ fun SecurityIncidentsScreen() {
     }
 
     if (showNewIncident) {
-        NewIncidentDialog(onDismiss = { showNewIncident = false })
+        NewIncidentDialog(
+            onDismiss = { showNewIncident = false },
+            onConfirm = { titulo, ubicacion, esUrgente ->
+                vm.reportarIncidente(user.id, titulo, ubicacion, esUrgente)
+                showNewIncident = false
+            }
+        )
     }
 }
 
 @Composable
-private fun NewIncidentDialog(onDismiss: () -> Unit) {
-    var title by remember { mutableStateOf("") }
+private fun IncidenteCard(inc: Reporte) {
+    val priorityColor = if (inc.esUrgente) StatusDanger else StatusWarning
+    val priorityLabel = if (inc.esUrgente) "Alta" else "Media"
+    GuardianCard {
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(Icons.Default.Warning, null, tint = priorityColor, modifier = Modifier.size(20.dp).padding(top = 2.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("#${inc.id ?: "—"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    StatusChip(priorityLabel, priorityColor)
+                    StatusChip(inc.estatus, when (inc.estatus) { "Resuelto" -> StatusSuccess; "En proceso" -> StatusInfo; else -> StatusWarning })
+                }
+                Spacer(Modifier.height(2.dp))
+                Text(inc.titulo, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                inc.descripcion?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(inc.fechaCreacion ?: "—", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NewIncidentDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (titulo: String, ubicacion: String, esUrgente: Boolean) -> Unit
+) {
+    var title    by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
     var priority by remember { mutableStateOf("Media") }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Reportar incidente") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = title,    onValueChange = { title = it },    label = { Text("Descripción") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-                OutlinedTextField(value = location, onValueChange = { location = it }, label = { Text("Ubicación") },   modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(
+                    value = title, onValueChange = { title = it },
+                    label = { Text("Descripción del incidente") },
+                    modifier = Modifier.fillMaxWidth(), minLines = 2
+                )
+                OutlinedTextField(
+                    value = location, onValueChange = { location = it },
+                    label = { Text("Ubicación") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("Baja", "Media", "Alta").forEach { p ->
                         FilterChip(
                             selected = priority == p,
-                            onClick = { priority = p },
-                            label = { Text(p) },
-                            colors = FilterChipDefaults.filterChipColors(
+                            onClick  = { priority = p },
+                            label    = { Text(p) },
+                            colors   = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = when (p) { "Alta" -> StatusDanger; "Media" -> StatusWarning; else -> StatusInfo },
-                                selectedLabelColor = Color.White
+                                selectedLabelColor     = Color.White
                             )
                         )
                     }
                 }
             }
         },
-        confirmButton = { Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = StatusDanger)) { Text("Reportar") } },
+        confirmButton = {
+            Button(
+                onClick  = { if (title.isNotBlank()) onConfirm(title, location, priority == "Alta") },
+                enabled  = title.isNotBlank(),
+                colors   = ButtonDefaults.buttonColors(containerColor = StatusDanger)
+            ) { Text("Reportar") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
 }

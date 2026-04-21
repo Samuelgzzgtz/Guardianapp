@@ -10,38 +10,29 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.example.gab.data.model.Reporte
 import com.example.gab.ui.common.*
 import com.example.gab.ui.navigation.AppUser
+import com.example.gab.ui.resident.viewmodel.ResidentViewModel
 import com.example.gab.ui.theme.*
 
-private data class Report(
-    val id: String,
-    val title: String,
-    val description: String,
-    val date: String,
-    val status: String
-)
-
 @Composable
-fun ResidentReportsScreen(user: AppUser, navController: NavController) {
-    val allReports = remember {
-        listOf(
-            Report("045", "Filtración en techo",       "Hay una gotera en el baño principal.",          "15/04/2024", "Pendiente"),
-            Report("038", "Ruido nocturno",             "Vecinos con música alta después de medianoche.","10/04/2024", "En proceso"),
-            Report("031", "Iluminación pasillo roto",  "La luz del pasillo del piso 4 no funciona.",    "02/04/2024", "Resuelto"),
-            Report("024", "Daño en jardín comunitario","Zona de plantas dañada por obras.",              "20/03/2024", "Resuelto"),
-        )
-    }
+fun ResidentReportsScreen(user: AppUser, navController: NavController, vm: ResidentViewModel) {
+    val reportes  by vm.reportes.collectAsStateWithLifecycle()
+    val isLoading by vm.isLoading.collectAsStateWithLifecycle()
 
-    var selectedFilter by remember { mutableStateOf("Todos") }
-    var showNewDialog by remember { mutableStateOf(false) }
+    var selectedFilter  by remember { mutableStateOf("Todos") }
+    var showNewDialog   by remember { mutableStateOf(false) }
+    var reportToClose   by remember { mutableStateOf<Reporte?>(null) }
     val filters = listOf("Todos", "Pendiente", "En proceso", "Resuelto")
 
-    val filtered = if (selectedFilter == "Todos") allReports
-    else allReports.filter { it.status == selectedFilter }
+    val filtered = if (selectedFilter == "Todos") reportes
+    else reportes.filter { it.estatus == selectedFilter }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -54,35 +45,57 @@ fun ResidentReportsScreen(user: AppUser, navController: NavController) {
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     filters.forEach { f ->
-                        FilterChip(
-                            selected = selectedFilter == f,
-                            onClick = { selectedFilter = f },
-                            label = { Text(f) }
-                        )
+                        FilterChip(selected = selectedFilter == f, onClick = { selectedFilter = f }, label = { Text(f) })
+                    }
+                }
+                if (isLoading) {
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+
+            if (reportes.isEmpty() && !isLoading) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        Text("No tienes reportes aún", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
 
             items(filtered) { report ->
+                val statusColor = when (report.estatus) {
+                    "Resuelto"   -> StatusSuccess
+                    "En proceso" -> StatusInfo
+                    else         -> StatusWarning
+                }
                 GuardianCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("#${report.id}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                val statusColor = when (report.status) {
-                                    "Resuelto"   -> StatusSuccess
-                                    "En proceso" -> StatusInfo
-                                    else         -> StatusWarning
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("#${report.id ?: "—"}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    StatusChip(report.estatus, statusColor)
+                                    if (report.esUrgente) StatusChip("Urgente", StatusDanger)
                                 }
-                                StatusChip(report.status, statusColor)
+                                Spacer(Modifier.height(4.dp))
+                                Text(report.titulo, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                report.descripcion?.let {
+                                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                                }
+                                Text(report.fechaCreacion ?: "—", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            Spacer(Modifier.height(4.dp))
-                            Text(report.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                            Text(report.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
-                            Spacer(Modifier.height(4.dp))
-                            Text(report.date, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (report.estatus != "Resuelto") {
+                            OutlinedButton(
+                                onClick = { reportToClose = report },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = StatusSuccess)
+                            ) {
+                                Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Marcar como resuelto")
+                            }
+                        }
                     }
                 }
             }
@@ -93,20 +106,44 @@ fun ResidentReportsScreen(user: AppUser, navController: NavController) {
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
             containerColor = ResidentBlue
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Nuevo reporte", tint = androidx.compose.ui.graphics.Color.White)
+            Icon(Icons.Default.Add, contentDescription = "Nuevo reporte", tint = Color.White)
         }
     }
 
     if (showNewDialog) {
-        NewReportDialog(onDismiss = { showNewDialog = false })
+        NewReportDialog(
+            onDismiss = { showNewDialog = false },
+            onSubmit  = { titulo, desc, categoria ->
+                vm.submitReporte(user.id, categoria, titulo, desc)
+                showNewDialog = false
+            }
+        )
+    }
+
+    reportToClose?.let { r ->
+        AlertDialog(
+            onDismissRequest = { reportToClose = null },
+            title = { Text("Marcar como resuelto") },
+            text  = { Text("¿Confirmas que el reporte \"${r.titulo}\" ya fue resuelto?") },
+            confirmButton = {
+                Button(
+                    onClick = { r.id?.let { vm.cerrarReporte(user.id, it) }; reportToClose = null },
+                    colors  = ButtonDefaults.buttonColors(containerColor = StatusSuccess)
+                ) { Text("Confirmar") }
+            },
+            dismissButton = { TextButton(onClick = { reportToClose = null }) { Text("Cancelar") } }
+        )
     }
 }
 
 @Composable
-private fun NewReportDialog(onDismiss: () -> Unit) {
-    var title by remember { mutableStateOf("") }
+private fun NewReportDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (titulo: String, desc: String, categoria: String) -> Unit
+) {
+    var title       by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("Mantenimiento") }
+    var category    by remember { mutableStateOf("Mantenimiento") }
     val categories = listOf("Mantenimiento", "Seguridad", "Ruido", "Limpieza", "Otro")
 
     AlertDialog(
@@ -114,26 +151,12 @@ private fun NewReportDialog(onDismiss: () -> Unit) {
         title = { Text("Nuevo Reporte") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Título") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Descripción") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3
-                )
+                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Título") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Descripción") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
                 var expanded by remember { mutableStateOf(false) }
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                     OutlinedTextField(
-                        value = category,
-                        onValueChange = {},
-                        readOnly = true,
+                        value = category, onValueChange = {}, readOnly = true,
                         label = { Text("Categoría") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                         modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
@@ -147,10 +170,8 @@ private fun NewReportDialog(onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            Button(onClick = onDismiss) { Text("Enviar") }
+            Button(onClick = { if (title.isNotBlank()) onSubmit(title, description, category) }, enabled = title.isNotBlank()) { Text("Enviar") }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
-        }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
 }
