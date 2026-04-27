@@ -129,4 +129,40 @@ class ResidentRepository(private val context: Context) {
             filter { eq("id", unidadId) }
         }.decodeList<Unidad>().firstOrNull()
     }
+
+    suspend fun solicitarLimpieza(userId: Int, fkUnidad: Int, notas: String): Result<Unit> = runCatching {
+        val fecha = java.time.LocalDate.now().toString()
+        client.postgrest["tarealimpieza"].insert(
+            TareaLimpieza(
+                fkAsignado = null,
+                fkUnidad   = fkUnidad,
+                titulo     = "Solicitud de limpieza",
+                fecha      = fecha,
+                prioridad  = "normal",
+                notas      = notas.ifBlank { null },
+                estatus    = "pendiente"
+            )
+        )
+    }
+
+    suspend fun getVehiculos(userId: Int): Result<List<Vehiculo>> = runCatching {
+        client.postgrest["vehiculo"].select {
+            filter { eq("fk_usuario", userId) }
+        }.decodeList()
+    }
+
+    suspend fun agregarVehiculo(userId: Int, placa: String, descripcion: String, color: String): Result<Unit> = runCatching {
+        client.postgrest["vehiculo"].insert(
+            Vehiculo(
+                fkUsuario   = userId,
+                placa       = placa.uppercase().trim(),
+                descripcion = descripcion.ifBlank { null },
+                color       = color.ifBlank { null }
+            )
+        )
+    }
+
+    suspend fun eliminarVehiculo(vehiculoId: Int): Result<Unit> = runCatching {
+        client.postgrest["vehiculo"].delete { filter { eq("id", vehiculoId) } }
+    }
 }

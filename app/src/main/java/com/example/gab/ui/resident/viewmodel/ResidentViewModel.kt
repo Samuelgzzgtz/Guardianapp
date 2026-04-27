@@ -5,7 +5,12 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gab.data.model.*
+import com.example.gab.data.remote.SupabaseClientProvider
 import com.example.gab.data.repository.ResidentRepository
+import io.github.jan.supabase.realtime.PostgresAction
+import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.postgresChangeFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import com.example.gab.util.calcularRecargo
@@ -53,15 +58,17 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
     fun loadAll(userId: Int) {
         viewModelScope.launch {
             _isLoading.value = true
-            repo.getCuota(userId).onSuccess      { _cuota.value      = it }
-            repo.getAvisos().onSuccess            { _avisos.value     = it }
-            repo.getReportes(userId).onSuccess    { _reportes.value   = it }
-            repo.getAmenidades().onSuccess        { _amenidades.value = it }
+            repo.getCuota(userId).onSuccess           { _cuota.value          = it }
+            repo.getAvisos().onSuccess                { _avisos.value         = it }
+            repo.getReportes(userId).onSuccess        { _reportes.value       = it }
+            repo.getAmenidades().onSuccess            { _amenidades.value     = it }
             repo.getReservas(userId).onSuccess        { _reservas.value       = it }
             repo.getHistorialCuotas(userId).onSuccess { _historialCuotas.value = it }
             repo.getUsuarioUnidad(userId).onSuccess   { _unidad.value         = it }
+            repo.getVehiculos(userId).onSuccess       { _vehiculos.value      = it }
             _isLoading.value = false
         }
+        startRealtime(userId)
     }
 
     fun pagarCuota(userId: Int) {
@@ -133,6 +140,69 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
                     repo.getReservas(userId).onSuccess { _reservas.value = it }
                 }
                 .onFailure { _toastMessage.value = "Error al cancelar: ${it.message}" }
+        }
+    }
+
+    private var realtimeJob: Job? = null
+
+    fun startRealtime(userId: Int) {
+        realtimeJob?.cancel()
+        realtimeJob = viewModelScope.launch {
+            val client  = SupabaseClientProvider.client
+            val channel = client.channel("resident-live-$userId")
+            val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                table = "reserva"
+            }
+            channel.subscribe()
+            changes.collect {
+                repo.getReservas(userId).onSuccess { _reservas.value = it }
+                repo.getAvisos().onSuccess { _avisos.value = it }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        realtimeJob?.cancel()
+    }
+
+    fun solicitarLimpieza(userId: Int, notas: String) {
+        viewModelScope.launch {
+            val fkUnidad = _unidad.value?.id ?: run {
+                _toastMessage.value = "No tienes una unidad asignada"
+                return@launch
+            }
+            repo.solicitarLimpieza(userId, fkUnidad, notas)
+                .onSuccess { _toastMessage.value = "Solicitud de limpieza enviada" }
+                .onFailure { _toastMessage.value = "Error al enviar solicitud: ${it.message}" }
+        }
+    }
+
+    fun cargarVehiculos(userId: Int) {
+        viewModelScope.launch {
+            repo.getVehiculos(userId).onSuccess { _vehiculos.value = it }
+        }
+    }
+
+    fun agregarVehiculo(userId: Int, placa: String, descripcion: String, color: String) {
+        viewModelScope.launch {
+            repo.agregarVehiculo(userId, placa, descripcion, color)
+                .onSuccess {
+                    _toastMessage.value = "Vehículo registrado"
+                    repo.getVehiculos(userId).onSuccess { _vehiculos.value = it }
+                }
+                .onFailure { _toastMessage.value = "Error: ${it.message}" }
+        }
+    }
+
+    fun eliminarVehiculo(userId: Int, vehiculoId: Int) {
+        viewModelScope.launch {
+            repo.eliminarVehiculo(vehiculoId)
+                .onSuccess {
+                    _toastMessage.value = "Vehículo eliminado"
+                    _vehiculos.value = _vehiculos.value.filter { it.id != vehiculoId }
+                }
+                .onFailure { _toastMessage.value = "Error al eliminar: ${it.message}" }
         }
     }
 

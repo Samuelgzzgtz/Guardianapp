@@ -1,10 +1,9 @@
 package com.example.gab.data.repository
 
-import com.example.gab.data.model.AccesoLog
-import com.example.gab.data.model.Reporte
-import com.example.gab.data.model.Usuario
+import com.example.gab.data.model.*
 import com.example.gab.data.remote.SupabaseClientProvider
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
 
 class SecurityRepository {
     private val client = SupabaseClientProvider.client
@@ -17,19 +16,26 @@ class SecurityRepository {
         else all.filter { it.nombre.contains(query, ignoreCase = true) }
     }
 
+    suspend fun getResidentePorId(userId: Int): Result<Usuario?> = runCatching {
+        client.postgrest["usuario"].select {
+            filter { eq("id", userId) }
+        }.decodeList<Usuario>().firstOrNull()
+    }
+
     suspend fun registrarAcceso(
         residenteId: Int,
         guardiaId: Int,
         direccion: String,
         hora: String
     ): Result<Unit> = runCatching {
-        val log = AccesoLog(
-            fkResidente  = residenteId,
-            fkGuardia    = guardiaId,
-            direccion    = direccion,
-            horaRegistro = hora
+        client.postgrest["accesolog"].insert(
+            AccesoLog(
+                fkResidente  = residenteId,
+                fkGuardia    = guardiaId,
+                direccion    = direccion,
+                horaRegistro = hora
+            )
         )
-        client.postgrest["accesolog"].insert(log)
     }
 
     suspend fun getAccesoLog(): Result<List<AccesoLog>> = runCatching {
@@ -42,19 +48,49 @@ class SecurityRepository {
         ubicacion: String,
         esUrgente: Boolean
     ): Result<Unit> = runCatching {
-        val reporte = Reporte(
-            fkUsuario   = guardiaId,
-            titulo      = titulo,
-            descripcion = ubicacion,
-            categoria   = "Seguridad",
-            esUrgente   = esUrgente
+        client.postgrest["reporte"].insert(
+            Reporte(
+                fkUsuario   = guardiaId,
+                titulo      = titulo,
+                descripcion = ubicacion,
+                categoria   = "Seguridad",
+                esUrgente   = esUrgente
+            )
         )
-        client.postgrest["reporte"].insert(reporte)
     }
 
     suspend fun getIncidentes(): Result<List<Reporte>> = runCatching {
         client.postgrest["reporte"].select {
             filter { eq("categoria", "Seguridad") }
         }.decodeList()
+    }
+
+    suspend fun guardarVisita(
+        nombreVisitante: String,
+        guardiaId: Int,
+        tipo: String
+    ): Result<Unit> = runCatching {
+        client.postgrest["visita"].insert(
+            Visita(
+                nombreVisitante = nombreVisitante,
+                fkGuardia       = guardiaId,
+                tipo            = tipo
+            )
+        )
+    }
+
+    suspend fun getVisitas(): Result<List<Visita>> = runCatching {
+        client.postgrest["visita"].select {
+            order("timestamp", Order.DESCENDING)
+            limit(50)
+        }.decodeList()
+    }
+
+    suspend fun getVehiculoPorPlaca(placa: String): Result<Vehiculo?> = runCatching {
+        val placaNorm = placa.uppercase().replace(" ", "").replace("-", "")
+        client.postgrest["vehiculo"].select().decodeList<Vehiculo>()
+            .firstOrNull { v ->
+                v.placa.uppercase().replace(" ", "").replace("-", "") == placaNorm
+            }
     }
 }
