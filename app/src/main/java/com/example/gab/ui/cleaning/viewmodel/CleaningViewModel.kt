@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gab.data.model.AreaComun
 import com.example.gab.data.model.TareaLimpieza
+import com.example.gab.data.model.Unidad
 import com.example.gab.data.remote.SupabaseClientProvider
 import com.example.gab.data.repository.CleaningRepository
 import io.github.jan.supabase.realtime.PostgresAction
@@ -25,6 +26,9 @@ class CleaningViewModel : ViewModel() {
     private val _areas = MutableStateFlow<List<AreaComun>>(emptyList())
     val areas: StateFlow<List<AreaComun>> = _areas.asStateFlow()
 
+    private val _unidades = MutableStateFlow<Map<Int, Unidad>>(emptyMap())
+    val unidades: StateFlow<Map<Int, Unidad>> = _unidades.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -37,6 +41,7 @@ class CleaningViewModel : ViewModel() {
             val today = LocalDate.now().toString()
             repo.getTareas(userId, today).onSuccess { _tareas.value = it }
             repo.getAreas().onSuccess { _areas.value = it }
+            repo.getAllUnidades().onSuccess { list -> _unidades.value = list.associateBy { it.id } }
             _isLoading.value = false
         }
         startRealtime(userId)
@@ -75,6 +80,20 @@ class CleaningViewModel : ViewModel() {
                         if (it.id == tareaId) it.copy(estaCompletada = !completada) else it
                     }
                     _toastMessage.value = "Error al actualizar tarea"
+                }
+        }
+    }
+
+    fun setEstatus(tareaId: Int, estatus: String, userId: Int) {
+        _tareas.value = _tareas.value.map {
+            if (it.id == tareaId) it.copy(estatus = estatus) else it
+        }
+        viewModelScope.launch {
+            repo.setEstatus(tareaId, estatus)
+                .onFailure {
+                    _toastMessage.value = "Error al actualizar estado"
+                    val today = LocalDate.now().toString()
+                    repo.getTareas(userId, today).onSuccess { _tareas.value = it }
                 }
         }
     }

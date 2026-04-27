@@ -83,7 +83,8 @@ fun ResidentHomeScreen(user: AppUser, navController: NavController, vm: Resident
     val unidad    by vm.unidad.collectAsStateWithLifecycle()
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
 
-    var showPayDialog by remember { mutableStateOf(false) }
+    var showPayDialog      by remember { mutableStateOf(false) }
+    var showLimpiezaDialog by remember { mutableStateOf(false) }
 
     val reportesAbiertos = reportes.count { it.estatus == "Pendiente" || it.estatus == "En proceso" }
 
@@ -161,9 +162,9 @@ fun ResidentHomeScreen(user: AppUser, navController: NavController, vm: Resident
         item {
             SectionHeader("Acciones rápidas")
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                QuickActionButton(Icons.Default.Add,             "Nuevo reporte", ResidentBlue,  { navController.navigate(Routes.RESIDENT_REPORTS)   }, Modifier.weight(1f))
-                QuickActionButton(Icons.Default.EventAvailable,  "Reservas",      SecurityGreen, { navController.navigate(Routes.RESIDENT_AMENITIES)  }, Modifier.weight(1f))
-                QuickActionButton(Icons.Default.Notifications,   "Avisos",        StatusWarning, {}, Modifier.weight(1f))
+                QuickActionButton(Icons.Default.Add,              "Nuevo reporte", ResidentBlue,    { navController.navigate(Routes.RESIDENT_REPORTS)  }, Modifier.weight(1f))
+                QuickActionButton(Icons.Default.EventAvailable,   "Reservas",      SecurityGreen,   { navController.navigate(Routes.RESIDENT_AMENITIES) }, Modifier.weight(1f))
+                QuickActionButton(Icons.Default.CleaningServices, "Limpieza",      CleaningOrange,  { showLimpiezaDialog = true                         }, Modifier.weight(1f))
             }
         }
 
@@ -203,6 +204,33 @@ fun ResidentHomeScreen(user: AppUser, navController: NavController, vm: Resident
                 ) { Text("Pagar") }
             },
             dismissButton = { TextButton(onClick = { showPayDialog = false }) { Text("Cancelar") } }
+        )
+    }
+
+    if (showLimpiezaDialog) {
+        var notasLimpieza by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showLimpiezaDialog = false },
+            title = { Text("Solicitar limpieza") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Se enviará una solicitud de limpieza para tu unidad.")
+                    OutlinedTextField(
+                        value = notasLimpieza,
+                        onValueChange = { notasLimpieza = it },
+                        label = { Text("Notas (opcional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 3
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { vm.solicitarLimpieza(user.id, notasLimpieza); showLimpiezaDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = CleaningOrange)
+                ) { Text("Solicitar") }
+            },
+            dismissButton = { TextButton(onClick = { showLimpiezaDialog = false }) { Text("Cancelar") } }
         )
     }
 }

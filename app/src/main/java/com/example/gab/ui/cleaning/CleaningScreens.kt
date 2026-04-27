@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -59,7 +60,7 @@ fun CleaningShell(user: AppUser, onLogout: () -> Unit) {
     ) {
         NavHost(navController = navController, startDestination = Routes.CLEANING_HOME) {
             composable(Routes.CLEANING_HOME)  { CleaningHomeScreen(user, vm) }
-            composable(Routes.CLEANING_TASKS) { CleaningTasksScreen(vm) }
+            composable(Routes.CLEANING_TASKS) { CleaningTasksScreen(user.id, vm) }
         }
     }
 }
@@ -71,7 +72,7 @@ fun CleaningHomeScreen(user: AppUser, vm: CleaningViewModel) {
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
 
     val totalTasks = tareas.size
-    val doneTasks  = tareas.count { it.estaCompletada }
+    val doneTasks  = tareas.count { it.estatus == "completada" }
     val progress   = if (totalTasks > 0) doneTasks.toFloat() / totalTasks else 0f
 
     LazyColumn(
@@ -111,8 +112,9 @@ fun CleaningHomeScreen(user: AppUser, vm: CleaningViewModel) {
 
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("Pendientes",  "${totalTasks - doneTasks}", Icons.Default.Pending,     StatusWarning, Modifier.weight(1f))
-                StatCard("Completadas", "$doneTasks",                Icons.Default.CheckCircle,  StatusSuccess, Modifier.weight(1f))
+                val enProceso = tareas.count { it.estatus == "en_proceso" }
+                StatCard("En proceso",   "$enProceso",                   Icons.Default.Pending,    StatusInfo,    Modifier.weight(1f))
+                StatCard("Completadas",  "$doneTasks",                   Icons.Default.CheckCircle, StatusSuccess, Modifier.weight(1f))
             }
         }
 
@@ -143,16 +145,16 @@ fun CleaningHomeScreen(user: AppUser, vm: CleaningViewModel) {
 }
 
 @Composable
-fun CleaningTasksScreen(vm: CleaningViewModel) {
+fun CleaningTasksScreen(userId: Int, vm: CleaningViewModel) {
     val tareas    by vm.tareas.collectAsStateWithLifecycle()
+    val unidades  by vm.unidades.collectAsStateWithLifecycle()
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
 
-    var filterDone by remember { mutableStateOf<Boolean?>(null) }
+    var filterEstatus by remember { mutableStateOf<String?>(null) }
 
-    val filtered = when (filterDone) {
-        true  -> tareas.filter { it.estaCompletada }
-        false -> tareas.filter { !it.estaCompletada }
-        null  -> tareas
+    val filtered = when (filterEstatus) {
+        null         -> tareas
+        else         -> tareas.filter { it.estatus == filterEstatus }
     }
 
     LazyColumn(
@@ -164,9 +166,10 @@ fun CleaningTasksScreen(vm: CleaningViewModel) {
             Text("Lista de Tareas", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = filterDone == null,  onClick = { filterDone = null  }, label = { Text("Todas") })
-                FilterChip(selected = filterDone == false, onClick = { filterDone = false }, label = { Text("Pendientes") })
-                FilterChip(selected = filterDone == true,  onClick = { filterDone = true  }, label = { Text("Hechas") })
+                FilterChip(selected = filterEstatus == null,         onClick = { filterEstatus = null          }, label = { Text("Todas") })
+                FilterChip(selected = filterEstatus == "pendiente",  onClick = { filterEstatus = "pendiente"  }, label = { Text("Pendientes") })
+                FilterChip(selected = filterEstatus == "en_proceso", onClick = { filterEstatus = "en_proceso" }, label = { Text("En proceso") })
+                FilterChip(selected = filterEstatus == "completada", onClick = { filterEstatus = "completada" }, label = { Text("Hechas") })
             }
             if (isLoading) {
                 Spacer(Modifier.height(8.dp))
@@ -183,49 +186,90 @@ fun CleaningTasksScreen(vm: CleaningViewModel) {
         }
 
         items(filtered, key = { it.id ?: it.titulo }) { tarea ->
+            val isCompletada = tarea.estatus == "completada"
+            val ubicacion = tarea.fkUnidad?.let { unidades[it]?.displayUbicacion() }
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 elevation = CardDefaults.cardElevation(2.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = tarea.estaCompletada,
-                        onCheckedChange = { checked ->
-                            tarea.id?.let { vm.toggleTarea(it, checked) }
-                        },
-                        colors = CheckboxDefaults.colors(checkedColor = CleaningOrange)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Column(Modifier.weight(1f)) {
-                        val priorityColor = when (tarea.prioridad) { "alta" -> StatusDanger; else -> StatusWarning }
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                tarea.titulo,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                textDecoration = if (tarea.estaCompletada) TextDecoration.LineThrough else null,
-                                color = if (tarea.estaCompletada) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
-                            )
-                            StatusChip(tarea.prioridad, priorityColor)
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    tarea.titulo,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium,
+                                    textDecoration = if (isCompletada) TextDecoration.LineThrough else null,
+                                    color = if (isCompletada) MaterialTheme.colorScheme.onSurfaceVariant
+                                            else MaterialTheme.colorScheme.onSurface
+                                )
+                                val priorityColor = when (tarea.prioridad) {
+                                    "alta"   -> StatusDanger
+                                    "normal" -> StatusWarning
+                                    else     -> MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                                StatusChip(tarea.prioridad, priorityColor)
+                            }
+                            tarea.area?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            ubicacion?.let {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(12.dp), tint = CleaningOrange)
+                                    Text(it, style = MaterialTheme.typography.labelSmall, color = CleaningOrange)
+                                }
+                            }
+                            tarea.horarioSlot?.let {
+                                Text("Hora: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
-                        tarea.area?.let {
-                            Text(
-                                it,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textDecoration = if (tarea.estaCompletada) TextDecoration.LineThrough else null
-                            )
-                        }
-                        tarea.horarioSlot?.let {
-                            Text("Hora: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        EstatusCycleButton(
+                            estatus = tarea.estatus,
+                            onNext = { nextEstatus ->
+                                tarea.id?.let { vm.setEstatus(it, nextEstatus, userId) }
+                            }
+                        )
+                    }
+                    tarea.notas?.let { notas ->
+                        if (notas.isNotBlank()) {
+                            HorizontalDivider()
+                            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.Notes, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    notas,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun EstatusCycleButton(estatus: String, onNext: (String) -> Unit) {
+    val (label, color) = when (estatus) {
+        "en_proceso" -> "En proceso" to StatusInfo
+        "completada" -> "Completado" to StatusSuccess
+        else         -> "Pendiente"  to StatusWarning
+    }
+    val next = when (estatus) {
+        "pendiente"  -> "en_proceso"
+        "en_proceso" -> "completada"
+        else         -> "pendiente"
+    }
+    AssistChip(
+        onClick = { onNext(next) },
+        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+        colors = AssistChipDefaults.assistChipColors(containerColor = color.copy(alpha = 0.12f), labelColor = color)
+    )
 }

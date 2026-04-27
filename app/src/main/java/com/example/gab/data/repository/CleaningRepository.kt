@@ -2,6 +2,7 @@ package com.example.gab.data.repository
 
 import com.example.gab.data.model.AreaComun
 import com.example.gab.data.model.TareaLimpieza
+import com.example.gab.data.model.Unidad
 import com.example.gab.data.remote.SupabaseClientProvider
 import io.github.jan.supabase.postgrest.postgrest
 
@@ -31,5 +32,15 @@ class CleaningRepository {
         client.postgrest["areacomun"].update({ set("estatus", estatus) }) {
             filter { eq("id", areaId) }
         }
+    }
+
+    suspend fun setEstatus(tareaId: Int, estatus: String): Result<Unit> = runCatching {
+        client.postgrest["tarealimpieza"].update({ set("estatus", estatus) }) {
+            filter { eq("id", tareaId) }
+        }
+    }
+
+    suspend fun getAllUnidades(): Result<List<Unidad>> = runCatching {
+        client.postgrest["unidad"].select().decodeList()
     }
 }
