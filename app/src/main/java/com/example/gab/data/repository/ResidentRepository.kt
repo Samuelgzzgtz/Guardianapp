@@ -81,6 +81,33 @@ class ResidentRepository(private val context: Context) {
         }
     }
 
+    suspend fun getSlotsTomados(amenidadId: Int, fecha: String): Result<List<String>> = runCatching {
+        client.postgrest["reserva"].select {
+            filter {
+                eq("fkamenidad", amenidadId)
+                eq("fechareservacion", fecha)
+                eq("estatus", "activa")
+            }
+        }.decodeList<Reserva>().mapNotNull { it.horarioSlot }
+    }
+
+    suspend fun crearReservaConValidacion(
+        userId: Int, amenidadId: Int, fecha: String, slot: String
+    ): Result<Unit> = runCatching {
+        val tomados = client.postgrest["reserva"].select {
+            filter {
+                eq("fkamenidad", amenidadId)
+                eq("fechareservacion", fecha)
+                eq("horarioslot", slot)
+                eq("estatus", "activa")
+            }
+        }.decodeList<Reserva>()
+        if (tomados.isNotEmpty()) error("Este horario ya está reservado. Elige otro.")
+        client.postgrest["reserva"].insert(
+            Reserva(fkUsuario = userId, fkAmenidad = amenidadId, fechaReservacion = fecha, horarioSlot = slot)
+        )
+    }
+
     suspend fun getHistorialCuotas(userId: Int): Result<List<Cuota>> = runCatching {
         client.postgrest["cuota"].select {
             filter { eq("fkusuario", userId) }

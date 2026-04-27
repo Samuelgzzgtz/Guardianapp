@@ -35,6 +35,15 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
     private val _unidad = MutableStateFlow<Unidad?>(null)
     val unidad: StateFlow<Unidad?> = _unidad.asStateFlow()
 
+    private val _slotsTomados = MutableStateFlow<List<String>>(emptyList())
+    val slotsTomados: StateFlow<List<String>> = _slotsTomados.asStateFlow()
+
+    private val _loadingSlots = MutableStateFlow(false)
+    val loadingSlots: StateFlow<Boolean> = _loadingSlots.asStateFlow()
+
+    private val _vehiculos = MutableStateFlow<List<Vehiculo>>(emptyList())
+    val vehiculos: StateFlow<List<Vehiculo>> = _vehiculos.asStateFlow()
+
     private val _isLoading  = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -93,14 +102,26 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun cargarSlotsTomados(amenidadId: Int, fecha: String) {
+        viewModelScope.launch {
+            _loadingSlots.value = true
+            repo.getSlotsTomados(amenidadId, fecha)
+                .onSuccess { _slotsTomados.value = it }
+                .onFailure { _slotsTomados.value = emptyList() }
+            _loadingSlots.value = false
+        }
+    }
+
+    fun limpiarSlotsTomados() { _slotsTomados.value = emptyList() }
+
     fun crearReserva(userId: Int, amenidadId: Int, fecha: String, slot: String) {
         viewModelScope.launch {
-            repo.crearReserva(userId, amenidadId, fecha, slot)
+            repo.crearReservaConValidacion(userId, amenidadId, fecha, slot)
                 .onSuccess {
                     _toastMessage.value = "Reserva creada exitosamente"
                     repo.getReservas(userId).onSuccess { _reservas.value = it }
                 }
-                .onFailure { _toastMessage.value = "Error al reservar: ${it.message}" }
+                .onFailure { _toastMessage.value = it.message ?: "Error al reservar" }
         }
     }
 

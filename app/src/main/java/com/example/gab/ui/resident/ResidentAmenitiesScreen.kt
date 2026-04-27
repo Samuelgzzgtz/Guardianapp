@@ -1,6 +1,7 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package com.example.gab.ui.resident
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,7 +11,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -22,9 +22,11 @@ import com.example.gab.ui.theme.*
 
 @Composable
 fun ResidentAmenitiesScreen(user: AppUser, vm: ResidentViewModel) {
-    val amenidades by vm.amenidades.collectAsStateWithLifecycle()
-    val reservas   by vm.reservas.collectAsStateWithLifecycle()
-    val isLoading  by vm.isLoading.collectAsStateWithLifecycle()
+    val amenidades   by vm.amenidades.collectAsStateWithLifecycle()
+    val reservas     by vm.reservas.collectAsStateWithLifecycle()
+    val slotsTomados by vm.slotsTomados.collectAsStateWithLifecycle()
+    val loadingSlots by vm.loadingSlots.collectAsStateWithLifecycle()
+    val isLoading    by vm.isLoading.collectAsStateWithLifecycle()
 
     var selectedAmenidad by remember { mutableStateOf<Amenidad?>(null) }
     var reservaToCancel  by remember { mutableStateOf<Int?>(null) }
@@ -100,11 +102,15 @@ fun ResidentAmenitiesScreen(user: AppUser, vm: ResidentViewModel) {
 
     selectedAmenidad?.let { amenidad ->
         NewReservaDialog(
-            amenidad = amenidad,
-            onDismiss = { selectedAmenidad = null },
+            amenidad     = amenidad,
+            slotsTomados = slotsTomados,
+            loadingSlots = loadingSlots,
+            onFechaChange = { fecha -> vm.cargarSlotsTomados(amenidad.id, fecha) },
+            onDismiss = { selectedAmenidad = null; vm.limpiarSlotsTomados() },
             onSubmit = { fecha, slot ->
                 vm.crearReserva(user.id, amenidad.id, fecha, slot)
                 selectedAmenidad = null
+                vm.limpiarSlotsTomados()
             }
         )
     }
@@ -128,12 +134,18 @@ fun ResidentAmenitiesScreen(user: AppUser, vm: ResidentViewModel) {
 @Composable
 private fun NewReservaDialog(
     amenidad: Amenidad,
+    slotsTomados: List<String>,
+    loadingSlots: Boolean,
+    onFechaChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onSubmit: (fecha: String, slot: String) -> Unit
 ) {
     var fecha by remember { mutableStateOf("") }
     var slot  by remember { mutableStateOf("08:00 - 10:00") }
-    val slots = listOf("08:00 - 10:00", "10:00 - 12:00", "12:00 - 14:00", "14:00 - 16:00", "16:00 - 18:00", "18:00 - 20:00")
+    val allSlots = listOf(
+        "08:00 - 10:00", "10:00 - 12:00", "12:00 - 14:00",
+        "14:00 - 16:00", "16:00 - 18:00", "18:00 - 20:00"
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -142,23 +154,52 @@ private fun NewReservaDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = fecha,
-                    onValueChange = { fecha = it },
+                    onValueChange = {
+                        fecha = it
+                        if (it.length == 10) onFechaChange(it)
+                    },
                     label = { Text("Fecha (YYYY-MM-DD)") },
                     placeholder = { Text("2026-05-01") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
-                var expanded by remember { mutableStateOf(false) }
-                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                    OutlinedTextField(
-                        value = slot, onValueChange = {}, readOnly = true,
-                        label = { Text("Horario") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                    )
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        slots.forEach { s ->
-                            DropdownMenuItem(text = { Text(s) }, onClick = { slot = s; expanded = false })
+                if (loadingSlots) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+                if (fecha.length == 10) {
+                    Text("Selecciona horario:", style = MaterialTheme.typography.labelMedium)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        allSlots.forEach { s ->
+                            val ocupado    = s in slotsTomados
+                            val isSelected = slot == s
+                            Surface(
+                                onClick = { if (!ocupado) slot = s },
+                                color = when {
+                                    ocupado    -> MaterialTheme.colorScheme.surfaceVariant
+                                    isSelected -> ResidentBlue.copy(alpha = 0.12f)
+                                    else       -> MaterialTheme.colorScheme.surface
+                                },
+                                shape  = MaterialTheme.shapes.small,
+                                border = if (isSelected) BorderStroke(1.dp, ResidentBlue) else null
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        s,
+                                        modifier = Modifier.weight(1f),
+                                        color = if (ocupado) MaterialTheme.colorScheme.onSurfaceVariant
+                                                else MaterialTheme.colorScheme.onSurface,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    if (ocupado) {
+                                        Text("Ocupado", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    } else if (isSelected) {
+                                        Icon(Icons.Default.CheckCircle, null, tint = ResidentBlue, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -166,9 +207,9 @@ private fun NewReservaDialog(
         },
         confirmButton = {
             Button(
-                onClick = { if (fecha.isNotBlank()) onSubmit(fecha, slot) },
-                enabled = fecha.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = ResidentBlue)
+                onClick  = { if (fecha.isNotBlank() && slot !in slotsTomados) onSubmit(fecha, slot) },
+                enabled  = fecha.length == 10 && slot !in slotsTomados,
+                colors   = ButtonDefaults.buttonColors(containerColor = ResidentBlue)
             ) { Text("Confirmar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
