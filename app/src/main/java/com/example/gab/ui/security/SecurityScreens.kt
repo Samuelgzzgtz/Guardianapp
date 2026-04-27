@@ -1,7 +1,10 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package com.example.gab.ui.security
 
+import android.app.Activity
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -29,6 +33,7 @@ import com.example.gab.ui.navigation.AppUser
 import com.example.gab.ui.navigation.Routes
 import com.example.gab.ui.security.viewmodel.SecurityViewModel
 import com.example.gab.ui.theme.*
+import com.google.zxing.integration.android.IntentIntegrator
 
 @Composable
 fun SecurityShell(user: AppUser, onLogout: () -> Unit) {
@@ -63,6 +68,7 @@ fun SecurityShell(user: AppUser, onLogout: () -> Unit) {
             composable(Routes.SECURITY_HOME)      { SecurityHomeScreen(user, vm, navController) }
             composable(Routes.SECURITY_VISITORS)  { SecurityVisitorsScreen(user, vm) }
             composable(Routes.SECURITY_INCIDENTS) { SecurityIncidentsScreen(user, vm) }
+            composable(Routes.SECURITY_QR)        { SecurityQrScreen(user, vm) }
         }
     }
 }
@@ -100,21 +106,10 @@ fun SecurityHomeScreen(user: AppUser, vm: SecurityViewModel, navController: NavC
 
         item {
             SectionHeader("Acciones rápidas")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                QuickActionButton(
-                    icon    = Icons.Default.PersonAdd,
-                    label   = "Registrar acceso",
-                    tint    = SecurityGreen,
-                    onClick = { navController.navigate(Routes.SECURITY_VISITORS) },
-                    modifier = Modifier.weight(1f)
-                )
-                QuickActionButton(
-                    icon    = Icons.Default.Report,
-                    label   = "Incidente",
-                    tint    = StatusDanger,
-                    onClick = { navController.navigate(Routes.SECURITY_INCIDENTS) },
-                    modifier = Modifier.weight(1f)
-                )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                QuickActionButton(Icons.Default.PersonAdd,     "Acceso",    SecurityGreen, { navController.navigate(Routes.SECURITY_VISITORS)  }, Modifier.weight(1f))
+                QuickActionButton(Icons.Default.QrCodeScanner, "QR Scan",   ResidentBlue,  { navController.navigate(Routes.SECURITY_QR)        }, Modifier.weight(1f))
+                QuickActionButton(Icons.Default.Report,        "Incidente", StatusDanger,  { navController.navigate(Routes.SECURITY_INCIDENTS) }, Modifier.weight(1f))
             }
         }
 
@@ -282,6 +277,107 @@ private fun RegisterAccessDialog(
                 enabled  = selected != null,
                 colors   = ButtonDefaults.buttonColors(containerColor = SecurityGreen)
             ) { Text("Registrar") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+
+@Composable
+fun SecurityQrScreen(user: AppUser, vm: SecurityViewModel) {
+    val residenteEscaneado by vm.residenteEscaneado.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    val scanLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val scanned = IntentIntegrator.parseActivityResult(result.resultCode, result.data)?.contents
+        if (scanned != null) vm.onQrScanned(scanned, user.id)
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        Spacer(Modifier.height(16.dp))
+        Icon(
+            Icons.Default.QrCodeScanner,
+            contentDescription = null,
+            modifier = Modifier.size(96.dp),
+            tint = SecurityGreen
+        )
+        Text(
+            "Escanear QR de Residente",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            "Escanea el código QR del residente para registrar su acceso rápidamente.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Button(
+            onClick = {
+                val intent = IntentIntegrator(context as Activity).apply {
+                    setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+                    setPrompt("Escanea el código QR del residente")
+                    setOrientationLocked(false)
+                    setBeepEnabled(true)
+                }.createScanIntent()
+                scanLauncher.launch(intent)
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = SecurityGreen),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.QrCodeScanner, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Abrir escáner QR")
+        }
+    }
+
+    residenteEscaneado?.let { residente ->
+        QrAccessDialog(
+            residente = residente,
+            onDismiss = { vm.clearResidenteEscaneado() },
+            onConfirm = { direccion -> vm.registrarAccesoQr(user.id, residente, direccion) }
+        )
+    }
+}
+
+@Composable
+private fun QrAccessDialog(
+    residente: Usuario,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var direccion by remember { mutableStateOf("ENTRADA") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Residente identificado") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(residente.nombre, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("ENTRADA", "SALIDA").forEach { dir ->
+                        FilterChip(
+                            selected = direccion == dir,
+                            onClick  = { direccion = dir },
+                            label    = { Text(dir) },
+                            colors   = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = if (dir == "ENTRADA") SecurityGreen else StatusWarning,
+                                selectedLabelColor     = Color.White
+                            )
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(direccion) },
+                colors  = ButtonDefaults.buttonColors(containerColor = SecurityGreen)
+            ) { Text("Registrar $direccion") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )

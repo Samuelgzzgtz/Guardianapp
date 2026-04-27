@@ -1,5 +1,6 @@
 package com.example.gab.ui.resident
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -9,7 +10,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.gab.ui.common.AvatarCircle
@@ -18,6 +21,8 @@ import com.example.gab.ui.navigation.AppUser
 import com.example.gab.ui.resident.viewmodel.ResidentViewModel
 import com.example.gab.ui.theme.ResidentBlue
 import com.example.gab.ui.theme.StatusDanger
+import com.google.zxing.BarcodeFormat
+import com.journeyapps.barcodescanner.BarcodeEncoder
 
 @Composable
 fun ResidentProfileScreen(user: AppUser, vm: ResidentViewModel, onLogout: () -> Unit) {
@@ -67,6 +72,39 @@ fun ResidentProfileScreen(user: AppUser, vm: ResidentViewModel, onLogout: () -> 
                 InfoRow(Icons.Default.Home, "Ubicación", unidad?.displayUbicacion() ?: user.apartment.ifBlank { "—" })
                 InfoRow(Icons.Default.Phone, "Teléfono", "+52 310 000 0000")
                 InfoRow(Icons.Default.Email, "Correo", "residente@guardianapp.co")
+            }
+        }
+
+        item {
+            GuardianCard {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Mi código QR", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Muéstralo al guardia para acceso rápido",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    val qrBitmap = remember(user.id) {
+                        try {
+                            BarcodeEncoder().encodeBitmap(user.id.toString(), BarcodeFormat.QR_CODE, 400, 400)
+                        } catch (_: Exception) { null }
+                    }
+                    if (qrBitmap != null) {
+                        Image(
+                            bitmap = qrBitmap.asImageBitmap(),
+                            contentDescription = "Código QR de acceso",
+                            modifier = Modifier.size(180.dp)
+                        )
+                    } else {
+                        Text("No se pudo generar el QR", color = StatusDanger, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("ID: ${user.id}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
 

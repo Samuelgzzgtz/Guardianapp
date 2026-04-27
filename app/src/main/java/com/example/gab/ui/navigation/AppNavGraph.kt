@@ -32,6 +32,7 @@ object Routes {
     const val SECURITY_HOME      = "security_home"
     const val SECURITY_VISITORS  = "security_visitors"
     const val SECURITY_INCIDENTS = "security_incidents"
+    const val SECURITY_QR        = "security_qr"
     // Admin
     const val ADMIN_DASHBOARD = "admin_dashboard"
     const val ADMIN_USERS     = "admin_users"
