@@ -66,9 +66,10 @@ fun SecurityShell(user: AppUser, onLogout: () -> Unit) {
     ) {
         NavHost(navController = navController, startDestination = Routes.SECURITY_HOME) {
             composable(Routes.SECURITY_HOME)      { SecurityHomeScreen(user, vm, navController) }
-            composable(Routes.SECURITY_VISITORS)  { SecurityVisitorsScreen(user, vm) }
+            composable(Routes.SECURITY_VISITORS)  { SecurityVisitorsScreen(user, vm, navController) }
             composable(Routes.SECURITY_INCIDENTS) { SecurityIncidentsScreen(user, vm) }
             composable(Routes.SECURITY_QR)        { SecurityQrScreen(user, vm) }
+            composable(Routes.SECURITY_INE)       { SecurityIneScreen(user, vm) }
         }
     }
 }
@@ -139,7 +140,7 @@ fun SecurityHomeScreen(user: AppUser, vm: SecurityViewModel, navController: NavC
 }
 
 @Composable
-fun SecurityVisitorsScreen(user: AppUser, vm: SecurityViewModel) {
+fun SecurityVisitorsScreen(user: AppUser, vm: SecurityViewModel, navController: NavController) {
     val accesoLog  by vm.accesoLog.collectAsStateWithLifecycle()
     val residentes by vm.residentes.collectAsStateWithLifecycle()
     val isLoading  by vm.isLoading.collectAsStateWithLifecycle()
@@ -157,6 +158,24 @@ fun SecurityVisitorsScreen(user: AppUser, vm: SecurityViewModel) {
                 if (isLoading) {
                     Spacer(Modifier.height(8.dp))
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { navController.navigate(Routes.SECURITY_QR) }) {
+                        Icon(Icons.Default.QrCodeScanner, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("QR")
+                    }
+                    OutlinedButton(onClick = { navController.navigate(Routes.SECURITY_INE) }) {
+                        Icon(Icons.Default.Badge, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("INE")
+                    }
+                    OutlinedButton(onClick = { navController.navigate(Routes.SECURITY_PLACAS) }) {
+                        Icon(Icons.Default.DirectionsCar, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Placa")
+                    }
                 }
             }
 
@@ -381,6 +400,63 @@ private fun QrAccessDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
+}
+
+@Composable
+fun SecurityIneScreen(user: AppUser, vm: SecurityViewModel) {
+    val showCamera       by vm.showIneCamera.collectAsStateWithLifecycle()
+    val nombreReconocido by vm.ineTextoReconocido.collectAsStateWithLifecycle()
+
+    if (showCamera) {
+        MlKitCameraScreen(
+            hint = "Apunta la cámara a la INE del visitante",
+            onTextRecognized = { vm.onIneTextoReconocido(it) },
+            onCancel = { vm.cerrarCamaraIne() }
+        )
+        return
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("Registro por INE", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            "Escanea la INE del visitante para extraer su nombre automáticamente.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Button(
+            onClick = { vm.abrirCamaraIne() },
+            colors = ButtonDefaults.buttonColors(containerColor = SecurityGreen),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.CameraAlt, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Escanear INE")
+        }
+
+        if (nombreReconocido.isNotBlank()) {
+            var nombreEditado by remember(nombreReconocido) { mutableStateOf(nombreReconocido) }
+            OutlinedTextField(
+                value = nombreEditado,
+                onValueChange = { nombreEditado = it },
+                label = { Text("Nombre del visitante") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Button(
+                onClick = { vm.confirmarVisitaIne(user.id, nombreEditado) },
+                enabled = nombreEditado.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = SecurityGreen),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.PersonAdd, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Registrar visitante")
+            }
+        }
+    }
 }
 
 @Composable

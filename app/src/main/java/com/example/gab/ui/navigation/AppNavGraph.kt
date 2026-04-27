@@ -33,6 +33,8 @@ object Routes {
     const val SECURITY_VISITORS  = "security_visitors"
     const val SECURITY_INCIDENTS = "security_incidents"
     const val SECURITY_QR        = "security_qr"
+    const val SECURITY_INE       = "security_ine"
+    const val SECURITY_PLACAS    = "security_placas"
     // Admin
     const val ADMIN_DASHBOARD = "admin_dashboard"
     const val ADMIN_USERS     = "admin_users"
