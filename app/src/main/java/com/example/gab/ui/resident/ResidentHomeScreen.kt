@@ -27,6 +27,7 @@ import com.example.gab.ui.navigation.Routes
 import com.example.gab.ui.resident.viewmodel.ResidentViewModel
 import com.example.gab.ui.theme.*
 import com.example.gab.util.calcularRecargo
+import com.example.gab.util.diasParaPago
 import com.example.gab.util.toMoneda
 
 @Composable
@@ -111,6 +112,45 @@ fun ResidentHomeScreen(user: AppUser, navController: NavController, vm: Resident
 
         if (isLoading) {
             item { LinearProgressIndicator(modifier = Modifier.fillMaxWidth()) }
+        }
+
+        cuota?.let { c ->
+            val dias = c.diasParaPago()
+            if (dias != null && dias <= 7) {
+                item {
+                    val (bannerColor, bannerIcon, bannerMsg) = when {
+                        dias < 0  -> Triple(StatusDanger,  Icons.Default.Warning,       "Pago vencido hace ${-dias} día(s)")
+                        dias == 0L -> Triple(StatusDanger,  Icons.Default.Warning,       "Pago vence HOY")
+                        dias <= 3  -> Triple(StatusWarning, Icons.Default.Notifications, "Pago vence en $dias día(s)")
+                        else       -> Triple(StatusInfo,    Icons.Default.Info,          "Pago vence en $dias días")
+                    }
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = bannerColor.copy(alpha = 0.12f)),
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(bannerIcon, null, tint = bannerColor)
+                            Text(
+                                bannerMsg,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = bannerColor,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (c.estatus != "pagado") {
+                                TextButton(onClick = { showPayDialog = true }) {
+                                    Text("Pagar", color = bannerColor, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         cuota?.let { c ->

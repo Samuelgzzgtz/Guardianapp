@@ -16,3 +16,11 @@ fun Cuota.calcularRecargo(): Double {
 }
 
 fun Double.toMoneda(): String = "$${"%.2f".format(this)}"
+
+fun Cuota.diasParaPago(): Long? {
+    if (estatus == "pagado" || fechaVencimiento == null) return null
+    return try {
+        val venc = LocalDate.parse(fechaVencimiento.take(10))
+        ChronoUnit.DAYS.between(LocalDate.now(), venc)
+    } catch (_: Exception) { null }
+}
