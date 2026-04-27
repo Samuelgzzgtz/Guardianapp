@@ -19,14 +19,17 @@ import com.example.gab.ui.common.AvatarCircle
 import com.example.gab.ui.common.GuardianCard
 import com.example.gab.ui.navigation.AppUser
 import com.example.gab.ui.resident.viewmodel.ResidentViewModel
+import com.example.gab.data.model.Vehiculo
 import com.example.gab.ui.theme.ResidentBlue
 import com.example.gab.ui.theme.StatusDanger
+import com.example.gab.ui.theme.SecurityGreen
 import com.google.zxing.BarcodeFormat
 import com.journeyapps.barcodescanner.BarcodeEncoder
 
 @Composable
 fun ResidentProfileScreen(user: AppUser, vm: ResidentViewModel, onLogout: () -> Unit) {
-    val unidad by vm.unidad.collectAsStateWithLifecycle()
+    val unidad    by vm.unidad.collectAsStateWithLifecycle()
+    val vehiculos by vm.vehiculos.collectAsStateWithLifecycle()
     var notificationsEnabled by remember { mutableStateOf(true) }
     var emailAlerts by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -109,6 +112,14 @@ fun ResidentProfileScreen(user: AppUser, vm: ResidentViewModel, onLogout: () -> 
         }
 
         item {
+            VehicleManagementCard(
+                vehiculos = vehiculos,
+                onAdd = { placa, desc, color -> vm.agregarVehiculo(user.id, placa, desc, color) },
+                onDelete = { id -> vm.eliminarVehiculo(user.id, id) }
+            )
+        }
+
+        item {
             GuardianCard {
                 Text("Notificaciones", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
@@ -147,6 +158,81 @@ fun ResidentProfileScreen(user: AppUser, vm: ResidentViewModel, onLogout: () -> 
             text = { Text("¿Estás seguro de que deseas salir?") },
             confirmButton = { Button(onClick = onLogout, colors = ButtonDefaults.buttonColors(containerColor = StatusDanger)) { Text("Salir") } },
             dismissButton = { TextButton(onClick = { showLogoutDialog = false }) { Text("Cancelar") } }
+        )
+    }
+}
+
+@Composable
+private fun VehicleManagementCard(
+    vehiculos: List<Vehiculo>,
+    onAdd: (placa: String, descripcion: String, color: String) -> Unit,
+    onDelete: (Int) -> Unit
+) {
+    var showAddDialog by remember { mutableStateOf(false) }
+
+    GuardianCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Mis Vehículos", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            TextButton(onClick = { showAddDialog = true }) {
+                Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                Text("Agregar")
+            }
+        }
+
+        if (vehiculos.isEmpty()) {
+            Text(
+                "No tienes vehículos registrados",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                vehiculos.forEach { v ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.DirectionsCar, null, tint = SecurityGreen, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(v.placa, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                            val detail = listOfNotNull(v.descripcion, v.color).joinToString(" · ")
+                            if (detail.isNotBlank()) {
+                                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        IconButton(onClick = { v.id?.let { onDelete(it) } }) {
+                            Icon(Icons.Default.Delete, null, tint = StatusDanger, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAddDialog) {
+        var placa by remember { mutableStateOf("") }
+        var descripcion by remember { mutableStateOf("") }
+        var color by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            title = { Text("Registrar vehículo") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(value = placa, onValueChange = { placa = it.uppercase() }, label = { Text("Placa *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(value = descripcion, onValueChange = { descripcion = it }, label = { Text("Marca / Modelo (opcional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(value = color, onValueChange = { color = it }, label = { Text("Color (opcional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { onAdd(placa, descripcion, color); showAddDialog = false },
+                    enabled = placa.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = ResidentBlue)
+                ) { Text("Registrar") }
+            },
+            dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("Cancelar") } }
         )
     }
 }

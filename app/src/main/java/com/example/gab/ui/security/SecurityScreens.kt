@@ -70,6 +70,7 @@ fun SecurityShell(user: AppUser, onLogout: () -> Unit) {
             composable(Routes.SECURITY_INCIDENTS) { SecurityIncidentsScreen(user, vm) }
             composable(Routes.SECURITY_QR)        { SecurityQrScreen(user, vm) }
             composable(Routes.SECURITY_INE)       { SecurityIneScreen(user, vm) }
+            composable(Routes.SECURITY_PLACAS)    { SecurityPlacasScreen(user, vm) }
         }
     }
 }
@@ -510,6 +511,68 @@ fun SecurityIncidentsScreen(user: AppUser, vm: SecurityViewModel) {
                 showNewIncident = false
             }
         )
+    }
+}
+
+@Composable
+fun SecurityPlacasScreen(user: AppUser, vm: SecurityViewModel) {
+    val showCamera   by vm.showPlacaCamera.collectAsStateWithLifecycle()
+    val placaResult  by vm.placaResultado.collectAsStateWithLifecycle()
+
+    if (showCamera) {
+        MlKitCameraScreen(
+            hint = "Apunta la cámara a la placa del vehículo",
+            onTextRecognized = { vm.onPlacaTextoReconocido(user.id, it) },
+            onCancel = { vm.cerrarCamaraPlaca() }
+        )
+        return
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("Verificar Placas", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            "Escanea la placa del vehículo para verificar si está registrado en el condominio.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Button(
+            onClick = { vm.abrirCamaraPlaca() },
+            colors = ButtonDefaults.buttonColors(containerColor = SecurityGreen),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.CameraAlt, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Escanear placa")
+        }
+
+        placaResult?.let { (placa, vehiculo) ->
+            GuardianCard {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(
+                            Icons.Default.DirectionsCar,
+                            null,
+                            tint = if (vehiculo != null) SecurityGreen else StatusWarning,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Column {
+                            Text("Placa: $placa", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            if (vehiculo != null) {
+                                Text("Registrado en el condominio", style = MaterialTheme.typography.bodySmall, color = SecurityGreen)
+                                vehiculo.descripcion?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                                vehiculo.color?.let { Text("Color: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            } else {
+                                Text("No registrado en el sistema", style = MaterialTheme.typography.bodySmall, color = StatusWarning)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
