@@ -14,9 +14,15 @@ data class Unidad(
     @SerialName("id") val id: Int = 0,
     @SerialName("numero") val numero: String = "",
     @SerialName("torre") val torre: String? = null,
+    @SerialName("piso") val piso: Int = 1,
     @SerialName("tipo") val tipo: String = "depto",
     @SerialName("estaactivo") val estaActivo: Boolean = true
-)
+) {
+    fun displayUbicacion(): String = buildString {
+        torre?.let { append("Bloque $it · ") }
+        append("Piso $piso · Depto $numero")
+    }
+}
 
 @Serializable
 data class MorosoRow(
@@ -104,12 +110,15 @@ data class AccesoLog(
 data class TareaLimpieza(
     @SerialName("id") val id: Int? = null,
     @SerialName("fkasignado") val fkAsignado: Int? = null,
+    @SerialName("fk_unidad") val fkUnidad: Int? = null,
     @SerialName("titulo") val titulo: String = "",
     @SerialName("area") val area: String? = null,
     @SerialName("horarioslot") val horarioSlot: String? = null,
     @SerialName("prioridad") val prioridad: String = "normal",
     @SerialName("estacompletada") val estaCompletada: Boolean = false,
-    @SerialName("fecha") val fecha: String? = null
+    @SerialName("fecha") val fecha: String? = null,
+    @SerialName("notas") val notas: String? = null,
+    @SerialName("estatus") val estatus: String = "pendiente"
 )
 
 @Serializable
@@ -129,6 +138,26 @@ data class Notificacion(
     @SerialName("cuerpo") val cuerpo: String? = null,
     @SerialName("estaleida") val estaLeida: Boolean = false,
     @SerialName("fechacreacion") val fechaCreacion: String? = null
+)
+
+@Serializable
+data class Vehiculo(
+    @SerialName("id") val id: Int? = null,
+    @SerialName("fk_usuario") val fkUsuario: Int? = null,
+    @SerialName("placa") val placa: String = "",
+    @SerialName("descripcion") val descripcion: String? = null,
+    @SerialName("color") val color: String? = null
+)
+
+@Serializable
+data class Visita(
+    @SerialName("id") val id: Int? = null,
+    @SerialName("nombre_visitante") val nombreVisitante: String = "",
+    @SerialName("fk_guardia") val fkGuardia: Int? = null,
+    @SerialName("tipo") val tipo: String = "INE",
+    @SerialName("placa") val placa: String? = null,
+    @SerialName("foto_url") val fotoUrl: String? = null,
+    @SerialName("timestamp") val timestamp: String? = null
 )
 
 data class UnidadConEstatus(val unidad: Unidad, val ocupada: Boolean)
