@@ -56,4 +56,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = AuthState.Idle
         }
     }
+
+    fun reenviarVerificacion(email: String) {
+        viewModelScope.launch {
+            repo.reenviarVerificacion(email)
+                .onSuccess { _uiState.value = AuthState.Error("Correo reenviado. Revisa tu bandeja de entrada.") }
+                .onFailure { _uiState.value = AuthState.Error("No se pudo reenviar: ${it.message}") }
+        }
+    }
 }

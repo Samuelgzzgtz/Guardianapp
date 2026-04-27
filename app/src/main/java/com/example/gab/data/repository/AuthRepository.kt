@@ -23,7 +23,13 @@ class AuthRepository(context: Context) {
         }
         val supaUser = client.auth.currentUserOrNull()
             ?: error("Login failed")
-        // Fetch app user profile (match by email)
+
+        // Bloquear si el email no está verificado
+        if (supaUser.emailConfirmedAt == null) {
+            client.auth.signOut()
+            error("Verifica tu correo antes de continuar")
+        }
+
         val usuario = client.postgrest["usuario"].select {
             filter { eq("email", email) }
         }.decodeSingle<Usuario>()
@@ -36,6 +42,24 @@ class AuthRepository(context: Context) {
             token = token
         )
         usuario
+    }
+
+    suspend fun reenviarVerificacion(email: String): Result<Unit> = runCatching {
+        val safeEmail = email.trim().replace("\"", "")
+        val baseUrl = SupabaseClientProvider.SUPABASE_URL
+        val anonKey = SupabaseClientProvider.SUPABASE_KEY
+        withContext(Dispatchers.IO) {
+            val conn = URL("$baseUrl/auth/v1/resend").openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("apikey", anonKey)
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            val body = """{"type":"signup","email":"$safeEmail"}"""
+            conn.outputStream.use { it.write(body.toByteArray()) }
+            val code = conn.responseCode
+            conn.disconnect()
+            if (code !in 200..299) error("No se pudo reenviar el correo ($code)")
+        }
     }
 
     suspend fun signOut() {
@@ -77,7 +101,7 @@ class AuthRepository(context: Context) {
             conn.setRequestProperty("Content-Type", "application/json")
             conn.doOutput = true
             conn.doInput  = true
-            val body = """{"email":"$safeEmail","password":"$password","email_confirm":true}"""
+            val body = """{"email":"$safeEmail","password":"$password","email_confirm":false}"""
             conn.outputStream.use { it.write(body.toByteArray()) }
             val code = conn.responseCode
             if (code !in 200..299) {

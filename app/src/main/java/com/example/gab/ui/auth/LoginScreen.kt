@@ -171,6 +171,22 @@ fun LoginScreen(
                             }
                         }
 
+                        // Botón de reenvío cuando el error es de verificación
+                        val errorMsg = (uiState as? AuthState.Error)?.message ?: ""
+                        if (errorMsg.contains("Verifica") || errorMsg.contains("verifica")) {
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedButton(
+                                onClick = { viewModel.reenviarVerificacion(email) },
+                                enabled = email.isNotBlank(),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.Email, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Reenviar correo de verificación")
+                            }
+                        }
+
                     }
                 }
 
