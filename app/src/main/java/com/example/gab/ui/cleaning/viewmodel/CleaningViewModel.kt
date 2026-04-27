@@ -4,7 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gab.data.model.AreaComun
 import com.example.gab.data.model.TareaLimpieza
+import com.example.gab.data.remote.SupabaseClientProvider
 import com.example.gab.data.repository.CleaningRepository
+import io.github.jan.supabase.realtime.PostgresAction
+import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.postgresChangeFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -12,6 +17,7 @@ import java.time.LocalDate
 class CleaningViewModel : ViewModel() {
 
     private val repo = CleaningRepository()
+    private var realtimeJob: Job? = null
 
     private val _tareas = MutableStateFlow<List<TareaLimpieza>>(emptyList())
     val tareas: StateFlow<List<TareaLimpieza>> = _tareas.asStateFlow()
@@ -33,6 +39,27 @@ class CleaningViewModel : ViewModel() {
             repo.getAreas().onSuccess { _areas.value = it }
             _isLoading.value = false
         }
+        startRealtime(userId)
+    }
+
+    fun startRealtime(userId: Int) {
+        realtimeJob?.cancel()
+        realtimeJob = viewModelScope.launch {
+            val channel = SupabaseClientProvider.client.channel("cleaning-$userId")
+            val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                table = "tarealimpieza"
+            }
+            channel.subscribe()
+            changes.collect {
+                val today = LocalDate.now().toString()
+                repo.getTareas(userId, today).onSuccess { _tareas.value = it }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        realtimeJob?.cancel()
     }
 
     fun toggleTarea(tareaId: Int, completada: Boolean) {
