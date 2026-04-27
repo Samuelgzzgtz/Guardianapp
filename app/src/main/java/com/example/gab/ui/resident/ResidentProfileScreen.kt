@@ -11,14 +11,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.gab.ui.common.AvatarCircle
 import com.example.gab.ui.common.GuardianCard
 import com.example.gab.ui.navigation.AppUser
+import com.example.gab.ui.resident.viewmodel.ResidentViewModel
 import com.example.gab.ui.theme.ResidentBlue
 import com.example.gab.ui.theme.StatusDanger
 
 @Composable
-fun ResidentProfileScreen(user: AppUser, onLogout: () -> Unit) {
+fun ResidentProfileScreen(user: AppUser, vm: ResidentViewModel, onLogout: () -> Unit) {
+    val unidad by vm.unidad.collectAsStateWithLifecycle()
     var notificationsEnabled by remember { mutableStateOf(true) }
     var emailAlerts by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -61,7 +64,7 @@ fun ResidentProfileScreen(user: AppUser, onLogout: () -> Unit) {
                 Text("Información personal", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(12.dp))
                 InfoRow(Icons.Default.Person, "Nombre completo", user.name)
-                InfoRow(Icons.Default.Home, "Apartamento", user.apartment.ifBlank { "—" })
+                InfoRow(Icons.Default.Home, "Ubicación", unidad?.displayUbicacion() ?: user.apartment.ifBlank { "—" })
                 InfoRow(Icons.Default.Phone, "Teléfono", "+52 310 000 0000")
                 InfoRow(Icons.Default.Email, "Correo", "residente@guardianapp.co")
             }

@@ -283,7 +283,7 @@ private fun CreateUserForm(
 
         if (rolId == 1) {
             val selectedLabel = unidadesConEstatus.find { it.unidad.id == unidadId }
-                ?.unidad?.let { "Unidad ${it.numero}${it.torre?.let { t -> " · $t" } ?: ""}" }
+                ?.unidad?.displayUbicacion()
                 ?: "Selecciona unidad"
             ExposedDropdownMenuBox(expanded = unidadExpanded, onExpandedChange = { unidadExpanded = it }) {
                 OutlinedTextField(
@@ -301,7 +301,7 @@ private fun CreateUserForm(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        "Unidad ${u.numero}${u.torre?.let { " · $it" } ?: ""}",
+                                        u.displayUbicacion(),
                                         color = if (ocupada) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                                 else MaterialTheme.colorScheme.onSurface
                                     )
@@ -525,7 +525,7 @@ fun AdminUnitsScreen(vm: AdminViewModel) {
                         Icon(Icons.Default.Apartment, null, tint = AdminPurple, modifier = Modifier.size(32.dp))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Unidad ${u.numero}${if (u.torre != null) " · Torre ${u.torre}" else ""}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(u.displayUbicacion(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                             Text(u.tipo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (residenteAsignado != null) {
                                 Text(residenteAsignado.nombre, style = MaterialTheme.typography.labelSmall, color = SecurityGreen)

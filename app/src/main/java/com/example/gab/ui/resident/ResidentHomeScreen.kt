@@ -70,7 +70,7 @@ fun ResidentShell(user: AppUser, onLogout: () -> Unit) {
             composable(Routes.RESIDENT_REPORTS)   { ResidentReportsScreen(user, navController, vm) }
             composable(Routes.RESIDENT_AMENITIES) { ResidentAmenitiesScreen(user, vm) }
             composable(Routes.RESIDENT_ACCOUNT)   { ResidentAccountScreen(vm) }
-            composable(Routes.RESIDENT_PROFILE)   { ResidentProfileScreen(user, onLogout) }
+            composable(Routes.RESIDENT_PROFILE)   { ResidentProfileScreen(user, vm, onLogout) }
         }
     }
 }
@@ -98,11 +98,7 @@ fun ResidentHomeScreen(user: AppUser, navController: NavController, vm: Resident
                 Text(user.name.ifBlank { "Residente" }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 if (unidad != null) {
                     Text(
-                        buildString {
-                            append("Unidad ${unidad!!.numero}")
-                            unidad!!.torre?.let { append(" · Torre $it") }
-                            append(" · ${unidad!!.tipo}")
-                        },
+                        unidad!!.displayUbicacion(),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
