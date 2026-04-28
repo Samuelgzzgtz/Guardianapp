@@ -68,16 +68,18 @@ fun AppShell(
         },
         bottomBar = {
             NavigationBar {
+                val startRoute = navItems.first().route
                 navItems.forEach { item ->
                     NavigationBarItem(
                         selected = currentRoute == item.route,
                         onClick = {
-                            if (currentRoute != item.route) {
-                                navController.navigate(item.route) {
-                                    popUpTo(navItems.first().route) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
+                            navController.navigate(item.route) {
+                                popUpTo(startRoute) {
+                                    saveState = true
+                                    inclusive = (item.route == startRoute)
                                 }
+                                launchSingleTop = true
+                                restoreState = true
                             }
                         },
                         icon = {

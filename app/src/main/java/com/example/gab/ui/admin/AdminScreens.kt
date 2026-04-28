@@ -150,6 +150,8 @@ fun AdminUsersScreen(vm: AdminViewModel) {
     var rolFiltro            by remember { mutableStateOf<Int?>(null) }
     var showBottomSheet      by remember { mutableStateOf(false) }
     var selectedLimpiezaUser by remember { mutableStateOf<Usuario?>(null) }
+    var selectedResidente    by remember { mutableStateOf<Usuario?>(null) }
+    val cuotasUsuario        by vm.cuotasUsuario.collectAsStateWithLifecycle()
 
     val roleFilters = listOf(null to "Todos", 1 to "Residentes", 2 to "Seguridad", 4 to "Limpieza")
     val filtered = usuarios.filter { u ->
@@ -195,9 +197,13 @@ fun AdminUsersScreen(vm: AdminViewModel) {
             items(filtered) { u ->
                 UserCard(
                     u,
-                    onRoleChange = { vm.actualizarRol(u.id, it) },
-                    onDelete     = { vm.eliminarUsuario(u.id, u.email ?: "", u.nombre) },
-                    onVerTareas  = if (u.fkRolUsuario == 4) ({
+                    onRoleChange   = { vm.actualizarRol(u.id, it) },
+                    onDelete       = { vm.eliminarUsuario(u.id, u.email ?: "", u.nombre) },
+                    onVerDetalle   = if (u.fkRolUsuario == 1) ({
+                        selectedResidente = u
+                        vm.loadCuotasUsuario(u.id)
+                    }) else null,
+                    onVerTareas    = if (u.fkRolUsuario == 4) ({
                         selectedLimpiezaUser = u
                         vm.loadTareasLimpieza(u.id)
                     }) else null
@@ -233,6 +239,16 @@ fun AdminUsersScreen(vm: AdminViewModel) {
             onAddTarea = { titulo, area, prioridad, notas ->
                 vm.crearTareaLimpieza(lUser.id, titulo, area, prioridad, notas)
             }
+        )
+    }
+
+    selectedResidente?.let { res ->
+        val unidad = unidadesConEstatus.firstOrNull { it.unidad.id == res.fkUnidad }?.unidad
+        ResidenteDetalleDialog(
+            usuario   = res,
+            unidad    = unidad,
+            cuotas    = cuotasUsuario,
+            onDismiss = { selectedResidente = null }
         )
     }
 }
@@ -368,7 +384,7 @@ private fun CreateUserForm(
 }
 
 @Composable
-private fun UserCard(u: Usuario, onRoleChange: (Int) -> Unit, onDelete: () -> Unit, onVerTareas: (() -> Unit)? = null) {
+private fun UserCard(u: Usuario, onRoleChange: (Int) -> Unit, onDelete: () -> Unit, onVerDetalle: (() -> Unit)? = null, onVerTareas: (() -> Unit)? = null) {
     val (roleColor, roleName) = when (u.fkRolUsuario) {
         2    -> SecurityGreen  to "Seguridad"
         3    -> AdminPurple    to "Admin"
@@ -426,15 +442,28 @@ private fun UserCard(u: Usuario, onRoleChange: (Int) -> Unit, onDelete: () -> Un
                     }
                 }
             }
-            if (onVerTareas != null && !confirmDelete) {
-                TextButton(
-                    onClick = onVerTareas,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 2.dp)
-                ) {
-                    Icon(Icons.Default.CleaningServices, null, modifier = Modifier.size(14.dp), tint = CleaningOrange)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Gestionar tareas del día", style = MaterialTheme.typography.labelSmall, color = CleaningOrange)
+            if (!confirmDelete) {
+                onVerDetalle?.let {
+                    TextButton(
+                        onClick = it,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Default.Info, null, modifier = Modifier.size(14.dp), tint = ResidentBlue)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Ver detalle y cuota", style = MaterialTheme.typography.labelSmall, color = ResidentBlue)
+                    }
+                }
+                onVerTareas?.let {
+                    TextButton(
+                        onClick = it,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Default.CleaningServices, null, modifier = Modifier.size(14.dp), tint = CleaningOrange)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Gestionar tareas del día", style = MaterialTheme.typography.labelSmall, color = CleaningOrange)
+                    }
                 }
             }
         }
@@ -996,6 +1025,101 @@ private fun CleaningTasksAdminDialog(
                         Text("Asignar tarea")
                     }
                 }
+            }
+        }
+    }
+}
+
+// ── Admin: Detalle de residente ───────────────────────────────────────────────
+
+@Composable
+private fun ResidenteDetalleDialog(
+    usuario: Usuario,
+    unidad: Unidad?,
+    cuotas: List<Cuota>,
+    onDismiss: () -> Unit
+) {
+    val cuotaActiva = cuotas.firstOrNull { it.estatus != "pagado" } ?: cuotas.firstOrNull()
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+                // Header
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AvatarCircle(
+                        initials = usuario.nombre.split(" ").take(2).mapNotNull { it.firstOrNull()?.toString() }.joinToString(""),
+                        color = ResidentBlue
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(usuario.nombre, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(usuario.email ?: "—", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null) }
+                }
+
+                HorizontalDivider()
+
+                // Ubicacion
+                if (unidad != null) {
+                    Card(colors = CardDefaults.cardColors(containerColor = ResidentBlue.copy(alpha = 0.08f)), shape = RoundedCornerShape(8.dp)) {
+                        Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            unidad.torre?.let {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("BLOQUE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(it, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ResidentBlue)
+                                }
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("PISO", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${unidad.piso}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ResidentBlue)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("DEPTO", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(unidad.numero, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ResidentBlue)
+                            }
+                        }
+                    }
+                } else {
+                    Text("Sin unidad asignada", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                // Cuota
+                Text("Estado de cuenta", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                if (cuotaActiva != null) {
+                    val statusColor = when (cuotaActiva.estatus) {
+                        "pagado"  -> StatusSuccess
+                        "vencido" -> StatusDanger
+                        else      -> StatusWarning
+                    }
+                    Card(colors = CardDefaults.cardColors(containerColor = statusColor.copy(alpha = 0.08f)), shape = RoundedCornerShape(8.dp)) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Column {
+                                    Text(cuotaActiva.periodo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(cuotaActiva.monto?.let { "${"%.2f".format(it)}" } ?: "—",
+                                        style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = statusColor)
+                                }
+                                StatusChip(cuotaActiva.estatus, statusColor)
+                            }
+                            cuotaActiva.fechaVencimiento?.let {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Default.CalendarToday, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("Vence: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                    if (cuotas.size > 1) {
+                        Text("${cuotas.size} cuotas en total · ${cuotas.count { it.estatus == "pagado" }} pagadas",
+                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else if (cuotas.isEmpty()) {
+                    Text("Sin cuotas registradas", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cerrar") }
             }
         }
     }
