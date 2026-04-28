@@ -58,7 +58,6 @@ dependencies {
     implementation(libs.supabase.realtime.kt)
     implementation(libs.supabase.storage.kt)
     implementation(libs.ktor.client.android)
-    implementation(libs.firebase.messaging.ktx)
     implementation(libs.kotlinx.serialization.json)
     // QR Code generation + scanning
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")

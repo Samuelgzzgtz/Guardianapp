@@ -41,25 +41,6 @@ class AuthRepository(private val context: Context) {
             unit = "",
             token = accessToken
         )
-        // Save FCM token to Supabase so Edge Functions can send push notifications
-        val fcmToken = context.getSharedPreferences("fcm", Context.MODE_PRIVATE).getString("token", null)
-        if (fcmToken != null) {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val baseUrl = SupabaseClientProvider.SUPABASE_URL
-                    val conn = URL("$baseUrl/rest/v1/usuario?id=eq.${usuario.id}").openConnection() as HttpURLConnection
-                    conn.requestMethod = "PATCH"
-                    conn.setRequestProperty("apikey", SupabaseClientProvider.SUPABASE_KEY)
-                    conn.setRequestProperty("Authorization", "Bearer $accessToken")
-                    conn.setRequestProperty("Content-Type", "application/json")
-                    conn.setRequestProperty("Prefer", "return=minimal")
-                    conn.doOutput = true
-                    conn.outputStream.use { it.write("""{"fcmtoken":"$fcmToken"}""".toByteArray()) }
-                    conn.responseCode
-                    conn.disconnect()
-                }
-            }
-        }
         usuario
     }
 

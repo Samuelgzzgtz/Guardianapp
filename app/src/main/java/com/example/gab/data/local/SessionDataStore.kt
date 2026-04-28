@@ -33,17 +33,9 @@ class SessionDataStore(private val context: Context) {
             prefs[SessionKeys.USER_UNIT]  = unit
             prefs[SessionKeys.AUTH_TOKEN] = token
         }
-        // Mirror to SharedPreferences so GuardianFirebaseService can read on token refresh
-        context.getSharedPreferences("guardian_simple_session", Context.MODE_PRIVATE)
-            .edit()
-            .putInt("user_id", userId)
-            .putString("auth_token", token)
-            .apply()
     }
 
     suspend fun clearSession() {
         context.sessionDataStore.edit { it.clear() }
-        context.getSharedPreferences("guardian_simple_session", Context.MODE_PRIVATE)
-            .edit().clear().apply()
     }
 }

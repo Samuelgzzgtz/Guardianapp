@@ -13,7 +13,6 @@ lifecycleViewmodelCompose = "2.8.7"
 datastorePreferences = "1.1.1"
 supabase = "3.0.0"
 ktor = "3.0.3"
-firebaseMessaging = "24.0.0"
 kotlinxSerializationJson = "1.7.3"
 
 [libraries]
@@ -40,7 +39,6 @@ supabase-auth-kt = { group = "io.github.jan-tennert.supabase", name = "auth-kt",
 supabase-realtime-kt = { group = "io.github.jan-tennert.supabase", name = "realtime-kt", version.ref = "supabase" }
 supabase-storage-kt = { group = "io.github.jan-tennert.supabase", name = "storage-kt", version.ref = "supabase" }
 ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
-firebase-messaging-ktx = { group = "com.google.firebase", name = "firebase-messaging-ktx", version.ref = "firebaseMessaging" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 
 [plugins]
