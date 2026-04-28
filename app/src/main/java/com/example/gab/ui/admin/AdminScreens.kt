@@ -195,9 +195,9 @@ fun AdminUsersScreen(vm: AdminViewModel) {
             items(filtered) { u ->
                 UserCard(
                     u,
-                    onRoleChange  = { vm.actualizarRol(u.id, it) },
-                    onDeactivate  = { vm.desactivarUsuario(u.id, u.nombre) },
-                    onVerTareas   = if (u.fkRolUsuario == 4) ({
+                    onRoleChange = { vm.actualizarRol(u.id, it) },
+                    onDelete     = { vm.eliminarUsuario(u.id, u.email ?: "", u.nombre) },
+                    onVerTareas  = if (u.fkRolUsuario == 4) ({
                         selectedLimpiezaUser = u
                         vm.loadTareasLimpieza(u.id)
                     }) else null
@@ -368,14 +368,14 @@ private fun CreateUserForm(
 }
 
 @Composable
-private fun UserCard(u: Usuario, onRoleChange: (Int) -> Unit, onDeactivate: () -> Unit, onVerTareas: (() -> Unit)? = null) {
+private fun UserCard(u: Usuario, onRoleChange: (Int) -> Unit, onDelete: () -> Unit, onVerTareas: (() -> Unit)? = null) {
     val (roleColor, roleName) = when (u.fkRolUsuario) {
         2    -> SecurityGreen  to "Seguridad"
         3    -> AdminPurple    to "Admin"
         4    -> CleaningOrange to "Limpieza"
         else -> ResidentBlue   to "Residente"
     }
-    var showMenu    by remember { mutableStateOf(false) }
+    var showMenu      by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
 
     GuardianCard {
@@ -398,26 +398,32 @@ private fun UserCard(u: Usuario, onRoleChange: (Int) -> Unit, onDeactivate: () -
                         }
                         HorizontalDivider()
                         DropdownMenuItem(
-                            text = { Text("Desactivar", color = StatusDanger) },
-                            leadingIcon = { Icon(Icons.Default.PersonOff, null, tint = StatusDanger) },
+                            text = { Text("Eliminar usuario", color = StatusDanger) },
+                            leadingIcon = { Icon(Icons.Default.DeleteForever, null, tint = StatusDanger) },
                             onClick = { showMenu = false; confirmDelete = true }
                         )
                     }
                 }
             }
             if (confirmDelete) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("¿Desactivar a ${u.nombre}?", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { confirmDelete = false }) { Text("No") }
-                    Button(
-                        onClick = { onDeactivate(); confirmDelete = false },
-                        colors = ButtonDefaults.buttonColors(containerColor = StatusDanger),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                    ) { Text("Sí", style = MaterialTheme.typography.labelMedium) }
+                Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "¿Eliminar a ${u.nombre}? Se borrarán todos sus datos y podrá volver a registrarse con el mismo correo.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = StatusDanger
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        TextButton(onClick = { confirmDelete = false }, modifier = Modifier.weight(1f)) { Text("Cancelar") }
+                        Button(
+                            onClick = { onDelete(); confirmDelete = false },
+                            colors = ButtonDefaults.buttonColors(containerColor = StatusDanger),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.DeleteForever, null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Eliminar", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
                 }
             }
             if (onVerTareas != null && !confirmDelete) {

@@ -178,11 +178,17 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun desactivarUsuario(userId: Int, nombre: String) {
+    fun eliminarUsuario(userId: Int, email: String, nombre: String) {
         viewModelScope.launch {
-            repo.deleteUsuario(userId)
-                .onSuccess { _toastMessage.value = "$nombre desactivado"; repo.getUsuarios().onSuccess { _usuarios.value = it } }
-                .onFailure { _toastMessage.value = "Error: ${it.message}" }
+            _isLoading.value = true
+            repo.eliminarUsuarioCompleto(userId, email)
+                .onSuccess {
+                    _toastMessage.value = "$nombre eliminado"
+                    repo.getUsuarios().onSuccess { _usuarios.value = it }
+                    repo.getUnidadesConEstatus().onSuccess { _unidadesConEstatus.value = it }
+                }
+                .onFailure { _toastMessage.value = "Error al eliminar: ${it.message}" }
+            _isLoading.value = false
         }
     }
 

@@ -4,6 +4,10 @@ import com.example.gab.data.model.*
 import com.example.gab.data.remote.SupabaseClientProvider
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
 
 class AdminRepository {
     private val client = SupabaseClientProvider.client
@@ -101,9 +105,54 @@ class AdminRepository {
         }.decodeList()
     }
 
-    suspend fun deleteUsuario(userId: Int): Result<Unit> = runCatching {
-        client.postgrest["usuario"].update({ set("estaactivo", false) }) {
-            filter { eq("id", userId) }
+    suspend fun eliminarUsuarioCompleto(userId: Int, email: String): Result<Unit> = runCatching {
+        val serviceKey = SupabaseClientProvider.SUPABASE_SERVICE_KEY
+        val baseUrl    = SupabaseClientProvider.SUPABASE_URL
+
+        withContext(Dispatchers.IO) {
+            // 1. Buscar UUID del auth user por email para poder eliminarlo después
+            val authUid = runCatching {
+                val encoded = java.net.URLEncoder.encode(email.trim(), "UTF-8")
+                val conn = URL("$baseUrl/auth/v1/admin/users?email=$encoded").openConnection() as HttpURLConnection
+                conn.setRequestProperty("apikey", serviceKey)
+                conn.setRequestProperty("Authorization", "Bearer $serviceKey")
+                val body = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+                Regex(""""id"\s*:\s*"([0-9a-f-]{36})"""").find(body)?.groupValues?.get(1)
+            }.getOrNull()
+
+            // Helper para DELETE via REST con service_role
+            fun restDelete(tableAndFilter: String) = runCatching {
+                val conn = URL("$baseUrl/rest/v1/$tableAndFilter").openConnection() as HttpURLConnection
+                conn.requestMethod = "DELETE"
+                conn.setRequestProperty("apikey", serviceKey)
+                conn.setRequestProperty("Authorization", "Bearer $serviceKey")
+                conn.responseCode
+                conn.disconnect()
+            }
+
+            // 2. Eliminar registros hijo (evitar FK violations)
+            restDelete("vehiculo?fk_usuario=eq.$userId")
+            restDelete("notificacion?fkusuario=eq.$userId")
+            restDelete("cuota?fkusuario=eq.$userId")
+            restDelete("reporte?fkusuario=eq.$userId")
+            restDelete("reserva?fkusuario=eq.$userId")
+            restDelete("tarealimpieza?fkasignado=eq.$userId")
+            restDelete("accesolog?fkresidente=eq.$userId")
+            restDelete("accesolog?fkguardia=eq.$userId")
+
+            // 3. Eliminar de tabla usuario
+            restDelete("usuario?id=eq.$userId")
+
+            // 4. Eliminar de auth.users
+            authUid?.let { uid ->
+                val conn = URL("$baseUrl/auth/v1/admin/users/$uid").openConnection() as HttpURLConnection
+                conn.requestMethod = "DELETE"
+                conn.setRequestProperty("apikey", serviceKey)
+                conn.setRequestProperty("Authorization", "Bearer $serviceKey")
+                conn.responseCode
+                conn.disconnect()
+            }
         }
     }
 
