@@ -3,7 +3,14 @@ package com.example.gab.ui.notifications.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gab.data.model.Notificacion
+import com.example.gab.data.remote.SupabaseClientProvider
 import com.example.gab.data.repository.NotificacionRepository
+import io.github.jan.supabase.realtime.PostgresAction
+import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.decodeRecord
+import io.github.jan.supabase.realtime.postgresChangeFlow
+import io.github.jan.supabase.postgrest.query.filter.FilterOperator
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -22,11 +29,12 @@ class NotificacionViewModel : ViewModel() {
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     private var currentUserId: Int = 0
+    private var realtimeJob: Job? = null
 
     fun init(userId: Int) {
         currentUserId = userId
         loadNotificaciones()
-        suscribirRealtime(userId)
+        startRealtime(userId)
     }
 
     private fun loadNotificaciones() {
@@ -46,12 +54,24 @@ class NotificacionViewModel : ViewModel() {
         }
     }
 
-    private fun suscribirRealtime(userId: Int) {
-        viewModelScope.launch {
-            repo.subscribirCanal(userId)
-            repo.suscribirRealtime(userId).collect { nueva ->
+    private fun startRealtime(userId: Int) {
+        realtimeJob?.cancel()
+        realtimeJob = viewModelScope.launch {
+            val channel = SupabaseClientProvider.client.channel("notif-$userId")
+            val flow = channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") {
+                table = "notificacion"
+                filter("fkusuario", FilterOperator.EQ, userId)
+            }
+            channel.subscribe()
+            flow.collect { action ->
+                val nueva = action.decodeRecord<Notificacion>()
                 _notificaciones.value = listOf(nueva) + _notificaciones.value
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        realtimeJob?.cancel()
     }
 }

@@ -88,7 +88,7 @@ class SecurityRepository {
 
     suspend fun getVehiculosPorResidente(userId: Int): Result<List<Vehiculo>> = runCatching {
         client.postgrest["vehiculo"].select {
-            filter { eq("fkusuario", userId) }
+            filter { eq("fk_usuario", userId) }
         }.decodeList()
     }
 

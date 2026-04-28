@@ -32,7 +32,8 @@ class AuthRepository(private val context: Context) {
 
         val usuario = client.postgrest["usuario"].select {
             filter { eq("email", email) }
-        }.decodeSingle<Usuario>()
+        }.decodeSingleOrNull<Usuario>()
+            ?: error("Perfil de usuario no encontrado. Contacta al administrador.")
         val accessToken = client.auth.currentSessionOrNull()?.accessToken ?: ""
         session.saveSession(
             userId = usuario.id,
@@ -101,7 +102,8 @@ class AuthRepository(private val context: Context) {
             conn.setRequestProperty("Content-Type", "application/json")
             conn.doOutput = true
             conn.doInput  = true
-            val body = """{"email":"$safeEmail","password":"$password","email_confirm":false}"""
+            val safePass = password.replace("\\", "\\\\").replace("\"", "\\\"")
+            val body = """{"email":"$safeEmail","password":"$safePass","email_confirm":false}"""
             conn.outputStream.use { it.write(body.toByteArray()) }
             val code = conn.responseCode
             if (code !in 200..299) {
