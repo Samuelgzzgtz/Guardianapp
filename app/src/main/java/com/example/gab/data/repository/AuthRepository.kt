@@ -78,6 +78,7 @@ class AuthRepository(private val context: Context) {
         val safeEmail   = email.trim().replace("\"", "")
         val safeNombre  = nombre.replace("\"", "").replace("\\", "")
         val serviceKey  = SupabaseClientProvider.SUPABASE_SERVICE_KEY
+        val anonKey     = SupabaseClientProvider.SUPABASE_KEY
         val baseUrl     = SupabaseClientProvider.SUPABASE_URL
 
         // 0. Verificar que la unidad no esté ocupada
@@ -151,6 +152,19 @@ class AuthRepository(private val context: Context) {
                     error(msg)
                 }
                 conn.disconnect()
+            }
+            // 3. Enviar email de confirmación al usuario recién creado
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val conn = URL("$baseUrl/auth/v1/resend").openConnection() as HttpURLConnection
+                    conn.requestMethod = "POST"
+                    conn.setRequestProperty("apikey", anonKey)
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.doOutput = true
+                    conn.outputStream.use { it.write("""{"type":"signup","email":"$safeEmail"}""".toByteArray()) }
+                    conn.responseCode
+                    conn.disconnect()
+                }
             }
         } catch (e: Exception) {
             // Rollback: eliminar el auth user para no dejar inconsistencia
