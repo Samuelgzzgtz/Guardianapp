@@ -562,7 +562,7 @@ fun AdminUnitsScreen(vm: AdminViewModel) {
     if (showNewDialog) {
         NewUnidadDialog(
             onDismiss = { showNewDialog = false },
-            onSubmit  = { num, torre, tipo -> vm.crearUnidad(num, torre, tipo); showNewDialog = false }
+            onSubmit  = { num, torre, piso, tipo -> vm.crearUnidad(num, torre, piso, tipo); showNewDialog = false }
         )
     }
 
@@ -594,10 +594,11 @@ fun AdminUnitsScreen(vm: AdminViewModel) {
 }
 
 @Composable
-private fun NewUnidadDialog(onDismiss: () -> Unit, onSubmit: (String, String?, String) -> Unit) {
-    var numero by remember { mutableStateOf("") }
-    var torre  by remember { mutableStateOf("") }
-    var tipo   by remember { mutableStateOf("depto") }
+private fun NewUnidadDialog(onDismiss: () -> Unit, onSubmit: (String, String?, Int, String) -> Unit) {
+    var numero  by remember { mutableStateOf("") }
+    var torre   by remember { mutableStateOf("") }
+    var pisoStr by remember { mutableStateOf("1") }
+    var tipo    by remember { mutableStateOf("depto") }
     val tipos = listOf("depto", "casa")
     var expanded by remember { mutableStateOf(false) }
 
@@ -606,8 +607,9 @@ private fun NewUnidadDialog(onDismiss: () -> Unit, onSubmit: (String, String?, S
         title = { Text("Nueva Unidad") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = numero, onValueChange = { numero = it }, label = { Text("Número") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(value = torre,  onValueChange = { torre = it  }, label = { Text("Torre (opcional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = numero,  onValueChange = { numero = it  }, label = { Text("Número") },           modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = torre,   onValueChange = { torre = it   }, label = { Text("Torre (opcional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = pisoStr, onValueChange = { pisoStr = it.filter(Char::isDigit) }, label = { Text("Piso") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                     OutlinedTextField(
                         value = tipo, onValueChange = {}, readOnly = true,
@@ -623,7 +625,7 @@ private fun NewUnidadDialog(onDismiss: () -> Unit, onSubmit: (String, String?, S
         },
         confirmButton = {
             Button(
-                onClick = { if (numero.isNotBlank()) onSubmit(numero, torre.ifBlank { null }, tipo) },
+                onClick = { if (numero.isNotBlank()) onSubmit(numero, torre.ifBlank { null }, pisoStr.toIntOrNull() ?: 1, tipo) },
                 enabled = numero.isNotBlank()
             ) { Text("Crear") }
         },

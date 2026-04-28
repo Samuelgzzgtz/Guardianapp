@@ -91,9 +91,9 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun crearUnidad(numero: String, torre: String?, tipo: String) {
+    fun crearUnidad(numero: String, torre: String?, piso: Int, tipo: String) {
         viewModelScope.launch {
-            repo.crearUnidad(numero, torre, tipo)
+            repo.crearUnidad(numero, torre, piso, tipo)
                 .onSuccess { _toastMessage.value = "Unidad $numero creada"; repo.getUnidades().onSuccess { _unidades.value = it } }
                 .onFailure { _toastMessage.value = "Error: ${it.message}" }
         }

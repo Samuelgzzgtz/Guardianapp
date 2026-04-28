@@ -72,9 +72,9 @@ class AdminRepository {
         unidades.map { u -> UnidadConEstatus(u, u.id in ocupadas) }
     }
 
-    suspend fun crearUnidad(numero: String, torre: String?, tipo: String): Result<Unit> = runCatching {
+    suspend fun crearUnidad(numero: String, torre: String?, piso: Int, tipo: String): Result<Unit> = runCatching {
         client.postgrest["unidad"].insert(
-            Unidad(numero = numero, torre = torre, tipo = tipo)
+            Unidad(numero = numero, torre = torre, piso = piso, tipo = tipo)
         )
     }
 
