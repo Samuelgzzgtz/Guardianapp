@@ -5,17 +5,17 @@ import com.example.gab.data.model.TareaLimpieza
 import com.example.gab.data.model.Unidad
 import com.example.gab.data.remote.SupabaseClientProvider
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
 
 class CleaningRepository {
     private val client = SupabaseClientProvider.client
 
     suspend fun getTareas(asignadoId: Int, fecha: String): Result<List<TareaLimpieza>> = runCatching {
+        // Fetch tasks for today, include both assigned to this user AND unassigned (resident requests)
         client.postgrest["tarealimpieza"].select {
-            filter {
-                eq("fkasignado", asignadoId)
-                eq("fecha", fecha)
-            }
-        }.decodeList()
+            filter { eq("fecha", fecha) }
+            order("id", Order.ASCENDING)
+        }.decodeList<TareaLimpieza>().filter { it.fkAsignado == asignadoId || it.fkAsignado == null }
     }
 
     suspend fun toggleTarea(tareaId: Int, completada: Boolean): Result<Unit> = runCatching {

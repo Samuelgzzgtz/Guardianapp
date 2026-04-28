@@ -107,6 +107,30 @@ class AdminRepository {
         }
     }
 
+    suspend fun getTareasLimpieza(userId: Int): Result<List<TareaLimpieza>> = runCatching {
+        client.postgrest["tarealimpieza"].select {
+            filter { eq("fkasignado", userId) }
+            order("id", Order.ASCENDING)
+        }.decodeList()
+    }
+
+    suspend fun crearTareaLimpieza(
+        asignadoId: Int, titulo: String, area: String?,
+        prioridad: String, fecha: String, notas: String?
+    ): Result<Unit> = runCatching {
+        client.postgrest["tarealimpieza"].insert(
+            TareaLimpieza(
+                fkAsignado = asignadoId,
+                titulo     = titulo,
+                area       = area?.takeIf { it.isNotBlank() },
+                prioridad  = prioridad,
+                fecha      = fecha,
+                notas      = notas?.takeIf { it.isNotBlank() },
+                estatus    = "pendiente"
+            )
+        )
+    }
+
     suspend fun tieneCuotasPendientes(unidadId: Int): Result<Boolean> = runCatching {
         val residentes = client.postgrest["usuario"].select {
             filter { eq("fkunidad", unidadId) }

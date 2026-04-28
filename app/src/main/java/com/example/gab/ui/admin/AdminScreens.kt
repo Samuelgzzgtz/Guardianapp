@@ -30,6 +30,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.window.Dialog
 import com.example.gab.data.model.*
 import com.example.gab.ui.admin.viewmodel.AdminViewModel
 import com.example.gab.ui.admin.viewmodel.CreateUserState
@@ -141,12 +142,14 @@ fun AdminDashboard(user: AppUser, vm: AdminViewModel) {
 fun AdminUsersScreen(vm: AdminViewModel) {
     val usuarios            by vm.usuarios.collectAsStateWithLifecycle()
     val unidadesConEstatus  by vm.unidadesConEstatus.collectAsStateWithLifecycle()
+    val tareasLimpieza      by vm.tareasLimpieza.collectAsStateWithLifecycle()
     val isLoading           by vm.isLoading.collectAsStateWithLifecycle()
-    val createState  by vm.createState.collectAsStateWithLifecycle()
+    val createState         by vm.createState.collectAsStateWithLifecycle()
 
-    var searchQuery     by remember { mutableStateOf("") }
-    var rolFiltro       by remember { mutableStateOf<Int?>(null) }
-    var showBottomSheet by remember { mutableStateOf(false) }
+    var searchQuery          by remember { mutableStateOf("") }
+    var rolFiltro            by remember { mutableStateOf<Int?>(null) }
+    var showBottomSheet      by remember { mutableStateOf(false) }
+    var selectedLimpiezaUser by remember { mutableStateOf<Usuario?>(null) }
 
     val roleFilters = listOf(null to "Todos", 1 to "Residentes", 2 to "Seguridad", 4 to "Limpieza")
     val filtered = usuarios.filter { u ->
@@ -193,7 +196,11 @@ fun AdminUsersScreen(vm: AdminViewModel) {
                 UserCard(
                     u,
                     onRoleChange  = { vm.actualizarRol(u.id, it) },
-                    onDeactivate  = { vm.desactivarUsuario(u.id, u.nombre) }
+                    onDeactivate  = { vm.desactivarUsuario(u.id, u.nombre) },
+                    onVerTareas   = if (u.fkRolUsuario == 4) ({
+                        selectedLimpiezaUser = u
+                        vm.loadTareasLimpieza(u.id)
+                    }) else null
                 )
             }
         }
@@ -216,6 +223,17 @@ fun AdminUsersScreen(vm: AdminViewModel) {
                 onDismiss = { showBottomSheet = false }
             )
         }
+    }
+
+    selectedLimpiezaUser?.let { lUser ->
+        CleaningTasksAdminDialog(
+            usuario   = lUser,
+            tareas    = tareasLimpieza,
+            onDismiss = { selectedLimpiezaUser = null },
+            onAddTarea = { titulo, area, prioridad, notas ->
+                vm.crearTareaLimpieza(lUser.id, titulo, area, prioridad, notas)
+            }
+        )
     }
 }
 
@@ -350,7 +368,7 @@ private fun CreateUserForm(
 }
 
 @Composable
-private fun UserCard(u: Usuario, onRoleChange: (Int) -> Unit, onDeactivate: () -> Unit) {
+private fun UserCard(u: Usuario, onRoleChange: (Int) -> Unit, onDeactivate: () -> Unit, onVerTareas: (() -> Unit)? = null) {
     val (roleColor, roleName) = when (u.fkRolUsuario) {
         2    -> SecurityGreen  to "Seguridad"
         3    -> AdminPurple    to "Admin"
@@ -400,6 +418,17 @@ private fun UserCard(u: Usuario, onRoleChange: (Int) -> Unit, onDeactivate: () -
                         colors = ButtonDefaults.buttonColors(containerColor = StatusDanger),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                     ) { Text("Sí", style = MaterialTheme.typography.labelMedium) }
+                }
+            }
+            if (onVerTareas != null && !confirmDelete) {
+                TextButton(
+                    onClick = onVerTareas,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(vertical = 2.dp)
+                ) {
+                    Icon(Icons.Default.CleaningServices, null, modifier = Modifier.size(14.dp), tint = CleaningOrange)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Gestionar tareas del día", style = MaterialTheme.typography.labelSmall, color = CleaningOrange)
                 }
             }
         }
@@ -596,39 +625,73 @@ fun AdminUnitsScreen(vm: AdminViewModel) {
 
 @Composable
 private fun NewUnidadDialog(onDismiss: () -> Unit, onSubmit: (String, String?, Int, String) -> Unit) {
-    var numero  by remember { mutableStateOf("") }
-    var torre   by remember { mutableStateOf("") }
-    var pisoStr by remember { mutableStateOf("1") }
-    var tipo    by remember { mutableStateOf("depto") }
-    val tipos = listOf("depto", "casa")
-    var expanded by remember { mutableStateOf(false) }
+    val bloques = listOf("A", "B", "C")
+    val pisos   = listOf(1, 2, 3, 4)
+    val deptos  = listOf(1, 2, 3, 4, 5)
+
+    var bloque         by remember { mutableStateOf("A") }
+    var piso           by remember { mutableStateOf(1) }
+    var depto          by remember { mutableStateOf(1) }
+    var bloqueExpanded by remember { mutableStateOf(false) }
+    var pisoExpanded   by remember { mutableStateOf(false) }
+    var deptoExpanded  by remember { mutableStateOf(false) }
+
+    val numero = depto.toString().padStart(2, '0')
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Nueva Unidad") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = numero,  onValueChange = { numero = it  }, label = { Text("Número") },           modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(value = torre,   onValueChange = { torre = it   }, label = { Text("Torre (opcional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(value = pisoStr, onValueChange = { pisoStr = it.filter(Char::isDigit) }, label = { Text("Piso") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+                Card(colors = CardDefaults.cardColors(containerColor = AdminPurple.copy(alpha = 0.10f))) {
+                    Text(
+                        "Bloque $bloque · Piso $piso · Depto $numero",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AdminPurple
+                    )
+                }
+                ExposedDropdownMenuBox(expanded = bloqueExpanded, onExpandedChange = { bloqueExpanded = it }) {
                     OutlinedTextField(
-                        value = tipo, onValueChange = {}, readOnly = true,
-                        label = { Text("Tipo") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                        value = "Bloque $bloque", onValueChange = {}, readOnly = true,
+                        label = { Text("Bloque") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(bloqueExpanded) },
                         modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
                     )
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        tipos.forEach { t -> DropdownMenuItem(text = { Text(t) }, onClick = { tipo = t; expanded = false }) }
+                    ExposedDropdownMenu(expanded = bloqueExpanded, onDismissRequest = { bloqueExpanded = false }) {
+                        bloques.forEach { b -> DropdownMenuItem(text = { Text("Bloque $b") }, onClick = { bloque = b; bloqueExpanded = false }) }
+                    }
+                }
+                ExposedDropdownMenuBox(expanded = pisoExpanded, onExpandedChange = { pisoExpanded = it }) {
+                    OutlinedTextField(
+                        value = "Piso $piso", onValueChange = {}, readOnly = true,
+                        label = { Text("Piso") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(pisoExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    )
+                    ExposedDropdownMenu(expanded = pisoExpanded, onDismissRequest = { pisoExpanded = false }) {
+                        pisos.forEach { p -> DropdownMenuItem(text = { Text("Piso $p") }, onClick = { piso = p; pisoExpanded = false }) }
+                    }
+                }
+                ExposedDropdownMenuBox(expanded = deptoExpanded, onExpandedChange = { deptoExpanded = it }) {
+                    OutlinedTextField(
+                        value = "Departamento $numero", onValueChange = {}, readOnly = true,
+                        label = { Text("Departamento") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(deptoExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    )
+                    ExposedDropdownMenu(expanded = deptoExpanded, onDismissRequest = { deptoExpanded = false }) {
+                        deptos.forEach { d ->
+                            val n = d.toString().padStart(2, '0')
+                            DropdownMenuItem(text = { Text("Departamento $n") }, onClick = { depto = d; deptoExpanded = false })
+                        }
                     }
                 }
             }
         },
         confirmButton = {
-            Button(
-                onClick = { if (numero.isNotBlank()) onSubmit(numero, torre.ifBlank { null }, pisoStr.toIntOrNull() ?: 1, tipo) },
-                enabled = numero.isNotBlank()
-            ) { Text("Crear") }
+            Button(onClick = { onSubmit(numero, bloque, piso, "depto") }) { Text("Crear") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
@@ -785,6 +848,146 @@ fun AdminAccountScreen(vm: AdminViewModel) {
                             Text((m.monto + recargo).toMoneda(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = StatusDanger)
                             if (recargo > 0) Text("+${recargo.toMoneda()} recargo", style = MaterialTheme.typography.labelSmall, color = StatusWarning)
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Admin: Gestión de tareas de limpieza ─────────────────────────────────────
+
+@Composable
+private fun CleaningTasksAdminDialog(
+    usuario: Usuario,
+    tareas: List<TareaLimpieza>,
+    onDismiss: () -> Unit,
+    onAddTarea: (titulo: String, area: String?, prioridad: String, notas: String?) -> Unit
+) {
+    var showAddForm  by remember { mutableStateOf(false) }
+    var titulo       by remember { mutableStateOf("") }
+    var area         by remember { mutableStateOf("") }
+    var notas        by remember { mutableStateOf("") }
+    var prioridad    by remember { mutableStateOf("normal") }
+    var prioExpanded by remember { mutableStateOf(false) }
+    val prioridades  = listOf("baja", "normal", "alta")
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.CleaningServices, null, tint = CleaningOrange, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Tareas de limpieza", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(usuario.nombre, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null) }
+                }
+
+                HorizontalDivider()
+
+                val pendientes  = tareas.count { it.estatus == "pendiente" }
+                val enProceso   = tareas.count { it.estatus == "en_proceso" }
+                val completadas = tareas.count { it.estatus == "completada" }
+                if (tareas.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (pendientes  > 0) StatusChip("$pendientes pendiente${if (pendientes > 1) "s" else ""}",  StatusWarning)
+                        if (enProceso   > 0) StatusChip("$enProceso en proceso",                                     StatusInfo)
+                        if (completadas > 0) StatusChip("$completadas hecha${if (completadas > 1) "s" else ""}",     StatusSuccess)
+                    }
+                }
+
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 260.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (tareas.isEmpty()) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                                Text("Sin tareas asignadas hoy", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    } else {
+                        items(tareas, key = { it.id ?: it.titulo }) { t ->
+                            val statusColor = when (t.estatus) {
+                                "completada" -> StatusSuccess
+                                "en_proceso" -> StatusInfo
+                                else         -> StatusWarning
+                            }
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = statusColor.copy(alpha = 0.08f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                t.titulo,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Medium,
+                                                textDecoration = if (t.estatus == "completada") androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                                                color = if (t.estatus == "completada") MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                                            )
+                                            t.area?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                        }
+                                        StatusChip(t.estatus.replace("_", " "), statusColor)
+                                    }
+                                    t.notas?.takeIf { it.isNotBlank() }?.let { n ->
+                                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Icon(Icons.Default.Notes, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(n, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                    val prioColor = when (t.prioridad) { "alta" -> StatusDanger; "normal" -> StatusWarning; else -> MaterialTheme.colorScheme.onSurfaceVariant }
+                                    StatusChip(t.prioridad, prioColor)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                TextButton(onClick = { showAddForm = !showAddForm }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(if (showAddForm) Icons.Default.ExpandLess else Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (showAddForm) "Cancelar" else "Agregar tarea")
+                }
+
+                if (showAddForm) {
+                    HorizontalDivider()
+                    OutlinedTextField(value = titulo, onValueChange = { titulo = it }, label = { Text("Titulo *") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(value = area, onValueChange = { area = it }, label = { Text("Area (opcional)") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(value = notas, onValueChange = { notas = it }, label = { Text("Notas (opcional)") },
+                        modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 3)
+                    ExposedDropdownMenuBox(expanded = prioExpanded, onExpandedChange = { prioExpanded = it }) {
+                        OutlinedTextField(
+                            value = prioridad, onValueChange = {}, readOnly = true,
+                            label = { Text("Prioridad") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(prioExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        )
+                        ExposedDropdownMenu(expanded = prioExpanded, onDismissRequest = { prioExpanded = false }) {
+                            prioridades.forEach { p ->
+                                DropdownMenuItem(text = { Text(p) }, onClick = { prioridad = p; prioExpanded = false })
+                            }
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            onAddTarea(titulo, area.ifBlank { null }, prioridad, notas.ifBlank { null })
+                            titulo = ""; area = ""; notas = ""; prioridad = "normal"; showAddForm = false
+                        },
+                        enabled = titulo.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = CleaningOrange)
+                    ) {
+                        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Asignar tarea")
                     }
                 }
             }

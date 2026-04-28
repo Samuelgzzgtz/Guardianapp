@@ -14,6 +14,7 @@ import io.github.jan.supabase.realtime.postgresChangeFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 sealed class CreateUserState {
     object Idle    : CreateUserState()
@@ -51,6 +52,11 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     private val _cuotasUsuario = MutableStateFlow<List<Cuota>>(emptyList())
     val cuotasUsuario: StateFlow<List<Cuota>> = _cuotasUsuario.asStateFlow()
 
+    private val _tareasLimpieza = MutableStateFlow<List<TareaLimpieza>>(emptyList())
+    val tareasLimpieza: StateFlow<List<TareaLimpieza>> = _tareasLimpieza.asStateFlow()
+
+    private var selectedLimpiezaUserId: Int? = null
+
     private val _isLoading    = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -80,14 +86,22 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     private fun startRealtime() {
         realtimeJob?.cancel()
         realtimeJob = viewModelScope.launch {
-            val channel = SupabaseClientProvider.client.channel("admin-reportes-live")
-            val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                table = "reporte"
-            }
+            val channel = SupabaseClientProvider.client.channel("admin-live")
+            val reporteChanges  = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "reporte" }
+            val cleaningChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "tarealimpieza" }
             channel.subscribe()
-            changes.collect {
-                repo.getReportes().onSuccess     { _reportes.value = it }
-                repo.getEstadisticas().onSuccess { _stats.value    = it }
+            launch {
+                reporteChanges.collect {
+                    repo.getReportes().onSuccess     { _reportes.value = it }
+                    repo.getEstadisticas().onSuccess { _stats.value    = it }
+                }
+            }
+            launch {
+                cleaningChanges.collect {
+                    selectedLimpiezaUserId?.let { uid ->
+                        repo.getTareasLimpieza(uid).onSuccess { _tareasLimpieza.value = it }
+                    }
+                }
             }
         }
     }
@@ -176,6 +190,25 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadCuotasUsuario(userId: Int) {
         viewModelScope.launch { repo.getCuotasPorUsuario(userId).onSuccess { _cuotasUsuario.value = it } }
+    }
+
+    fun loadTareasLimpieza(userId: Int) {
+        selectedLimpiezaUserId = userId
+        viewModelScope.launch {
+            repo.getTareasLimpieza(userId).onSuccess { _tareasLimpieza.value = it }
+        }
+    }
+
+    fun crearTareaLimpieza(asignadoId: Int, titulo: String, area: String?, prioridad: String, notas: String?) {
+        val fecha = java.time.LocalDate.now().toString()
+        viewModelScope.launch {
+            repo.crearTareaLimpieza(asignadoId, titulo, area, prioridad, fecha, notas)
+                .onSuccess {
+                    _toastMessage.value = "Tarea asignada"
+                    repo.getTareasLimpieza(asignadoId).onSuccess { _tareasLimpieza.value = it }
+                }
+                .onFailure { _toastMessage.value = "Error: ${it.message}" }
+        }
     }
 
     fun clearToast() { _toastMessage.value = null }
