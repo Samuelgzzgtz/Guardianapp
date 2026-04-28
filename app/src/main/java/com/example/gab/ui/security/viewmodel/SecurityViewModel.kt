@@ -45,6 +45,13 @@ class SecurityViewModel : ViewModel() {
     private val _placaResultado    = MutableStateFlow<Pair<String, Vehiculo?>?>(null)
     val placaResultado: StateFlow<Pair<String, Vehiculo?>?> = _placaResultado.asStateFlow()
 
+    // Resident-first vehicle flow
+    private val _residenteParaPlaca       = MutableStateFlow<Usuario?>(null)
+    val residenteParaPlaca: StateFlow<Usuario?> = _residenteParaPlaca.asStateFlow()
+
+    private val _vehiculosResidente       = MutableStateFlow<List<Vehiculo>>(emptyList())
+    val vehiculosResidente: StateFlow<List<Vehiculo>> = _vehiculosResidente.asStateFlow()
+
     private val _isLoading         = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -166,7 +173,23 @@ class SecurityViewModel : ViewModel() {
         }
     }
 
-    // ── PLACAS ──────────────────────────────────────────────────────────────
+    // ── PLACAS — Flujo correcto: residente primero → descripción visible → escanear placa ──────────
+    fun seleccionarResidenteParaPlaca(residente: Usuario) {
+        _residenteParaPlaca.value = residente
+        _placaResultado.value = null
+        viewModelScope.launch {
+            repo.getVehiculosPorResidente(residente.id)
+                .onSuccess { _vehiculosResidente.value = it }
+                .onFailure { _vehiculosResidente.value = emptyList() }
+        }
+    }
+
+    fun limpiarSeleccionResidentePlaca() {
+        _residenteParaPlaca.value = null
+        _vehiculosResidente.value = emptyList()
+        _placaResultado.value = null
+    }
+
     fun abrirCamaraPlaca()  { _showPlacaCamera.value = true }
     fun cerrarCamaraPlaca() { _showPlacaCamera.value = false; _placaResultado.value = null }
 
@@ -178,14 +201,21 @@ class SecurityViewModel : ViewModel() {
                 _toastMessage.value = "No se detectó placa. Intenta con mejor iluminación."
                 return@launch
             }
-            repo.getVehiculoPorPlaca(placaEncontrada)
-                .onSuccess { vehiculo ->
-                    _placaResultado.value = Pair(placaEncontrada, vehiculo)
-                    if (vehiculo != null) {
-                        repo.guardarVisita("Vehículo ${vehiculo.placa} (${vehiculo.descripcion ?: ""})", guardiaId, "PLACA")
-                    }
+            // If a resident is pre-selected, verify the plate against their registered vehicles
+            val residente = _residenteParaPlaca.value
+            val vehiculoCorrecto = if (residente != null) {
+                _vehiculosResidente.value.firstOrNull { v ->
+                    v.placa.uppercase().replace(" ", "").replace("-", "") ==
+                        placaEncontrada.uppercase().replace(" ", "").replace("-", "")
                 }
-                .onFailure { _toastMessage.value = "Error al consultar placa: ${it.message}" }
+            } else {
+                repo.getVehiculoPorPlaca(placaEncontrada).getOrNull()
+            }
+            _placaResultado.value = Pair(placaEncontrada, vehiculoCorrecto)
+            if (vehiculoCorrecto != null) {
+                repo.guardarVisita("Vehículo ${vehiculoCorrecto.placa} (${vehiculoCorrecto.descripcion ?: ""})", guardiaId, "PLACA")
+                    .onSuccess { repo.getVisitas().onSuccess { _visitas.value = it } }
+            }
         }
     }
 

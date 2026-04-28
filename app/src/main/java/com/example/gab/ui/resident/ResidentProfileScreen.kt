@@ -58,7 +58,11 @@ fun ResidentProfileScreen(user: AppUser, vm: ResidentViewModel, onLogout: () -> 
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(user.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = androidx.compose.ui.graphics.Color.White)
-                    Text(user.apartment, style = MaterialTheme.typography.bodyMedium, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f))
+                    Text(
+                        unidad?.displayUbicacion() ?: user.apartment.ifBlank { "Residente" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f)
+                    )
                     Spacer(Modifier.height(8.dp))
                     Surface(shape = MaterialTheme.shapes.small, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.2f)) {
                         Text("Residente activo", color = androidx.compose.ui.graphics.Color.White, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
@@ -245,7 +249,7 @@ private fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label
     ) {
         Icon(icon, contentDescription = null, tint = ResidentBlue, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(12.dp))
-        Column {
+        Column(Modifier.weight(1f)) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
         }

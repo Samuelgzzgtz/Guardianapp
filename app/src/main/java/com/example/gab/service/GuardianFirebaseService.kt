@@ -17,15 +17,28 @@ class GuardianFirebaseService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
+        applicationContext.getSharedPreferences("fcm", MODE_PRIVATE)
+            .edit().putString("token", token).apply()
         CoroutineScope(Dispatchers.IO).launch {
-            // Token is saved to DB when user logs in; here we just update if already logged in
             try {
-                @Suppress("UNUSED_EXPRESSION")
-                applicationContext.getSharedPreferences("fcm", MODE_PRIVATE)
-                    .edit().putString("token", token).apply()
-                // Token refresh handled at login time via AuthRepository
-            } catch (e: Exception) {
-                // Ignore — user not logged in yet
+                val prefs = applicationContext.getSharedPreferences("guardian_simple_session", MODE_PRIVATE)
+                val userId = prefs.getInt("user_id", -1)
+                val accessToken = prefs.getString("auth_token", null)
+                if (userId != -1 && !accessToken.isNullOrBlank()) {
+                    val baseUrl = com.example.gab.data.remote.SupabaseClientProvider.SUPABASE_URL
+                    val conn = java.net.URL("$baseUrl/rest/v1/usuario?id=eq.$userId").openConnection() as java.net.HttpURLConnection
+                    conn.requestMethod = "PATCH"
+                    conn.setRequestProperty("apikey", com.example.gab.data.remote.SupabaseClientProvider.SUPABASE_KEY)
+                    conn.setRequestProperty("Authorization", "Bearer $accessToken")
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.setRequestProperty("Prefer", "return=minimal")
+                    conn.doOutput = true
+                    conn.outputStream.use { it.write("""{"fcmtoken":"$token"}""".toByteArray()) }
+                    conn.responseCode
+                    conn.disconnect()
+                }
+            } catch (_: Exception) {
+                // Best-effort — will sync at next login
             }
         }
     }

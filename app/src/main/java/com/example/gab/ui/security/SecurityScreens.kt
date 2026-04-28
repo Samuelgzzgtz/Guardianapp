@@ -516,8 +516,14 @@ fun SecurityIncidentsScreen(user: AppUser, vm: SecurityViewModel) {
 
 @Composable
 fun SecurityPlacasScreen(user: AppUser, vm: SecurityViewModel) {
-    val showCamera   by vm.showPlacaCamera.collectAsStateWithLifecycle()
-    val placaResult  by vm.placaResultado.collectAsStateWithLifecycle()
+    val showCamera          by vm.showPlacaCamera.collectAsStateWithLifecycle()
+    val placaResult         by vm.placaResultado.collectAsStateWithLifecycle()
+    val residentes          by vm.residentes.collectAsStateWithLifecycle()
+    val residenteSeleccionado by vm.residenteParaPlaca.collectAsStateWithLifecycle()
+    val vehiculosResidente  by vm.vehiculosResidente.collectAsStateWithLifecycle()
+
+    var busqueda by remember { mutableStateOf("") }
+    var showResidenteDropdown by remember { mutableStateOf(false) }
 
     if (showCamera) {
         MlKitCameraScreen(
@@ -528,46 +534,137 @@ fun SecurityPlacasScreen(user: AppUser, vm: SecurityViewModel) {
         return
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        contentPadding = PaddingValues(vertical = 16.dp)
     ) {
-        Text("Verificar Placas", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(
-            "Escanea la placa del vehículo para verificar si está registrado en el condominio.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Button(
-            onClick = { vm.abrirCamaraPlaca() },
-            colors = ButtonDefaults.buttonColors(containerColor = SecurityGreen),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Default.CameraAlt, null)
-            Spacer(Modifier.width(8.dp))
-            Text("Escanear placa")
+        item {
+            Text("Verificar Placas", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Paso 1: Identifica al residente. Paso 2: Confirma el vehículo. Paso 3: Escanea la placa.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
-        placaResult?.let { (placa, vehiculo) ->
+        // Step 1: Resident search
+        item {
             GuardianCard {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(
-                            Icons.Default.DirectionsCar,
-                            null,
-                            tint = if (vehiculo != null) SecurityGreen else StatusWarning,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Column {
-                            Text("Placa: $placa", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            if (vehiculo != null) {
-                                Text("Registrado en el condominio", style = MaterialTheme.typography.bodySmall, color = SecurityGreen)
-                                vehiculo.descripcion?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                                vehiculo.color?.let { Text("Color: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                            } else {
-                                Text("No registrado en el sistema", style = MaterialTheme.typography.bodySmall, color = StatusWarning)
+                Text("1. Buscar residente", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                if (residenteSeleccionado == null) {
+                    OutlinedTextField(
+                        value = busqueda,
+                        onValueChange = { busqueda = it; vm.buscarResidente(it); showResidenteDropdown = it.isNotBlank() },
+                        label = { Text("Nombre del residente") },
+                        leadingIcon = { Icon(Icons.Default.Search, null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    if (showResidenteDropdown) {
+                        val filtrados = residentes.filter { it.nombre.contains(busqueda, ignoreCase = true) }.take(5)
+                        filtrados.forEach { r ->
+                            TextButton(
+                                onClick = { vm.seleccionarResidenteParaPlaca(r); showResidenteDropdown = false; busqueda = "" },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Person, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(r.nombre, modifier = Modifier.weight(1f))
                             }
+                        }
+                        if (filtrados.isEmpty()) {
+                            Text("Sin resultados", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Person, null, tint = SecurityGreen)
+                        Spacer(Modifier.width(8.dp))
+                        Text(residenteSeleccionado!!.nombre, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { vm.limpiarSeleccionResidentePlaca() }) { Text("Cambiar") }
+                    }
+                }
+            }
+        }
+
+        // Step 2: Show registered vehicles for visual confirmation
+        if (residenteSeleccionado != null) {
+            item {
+                GuardianCard {
+                    Text("2. Confirmar vehículo visualmente", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    if (vehiculosResidente.isEmpty()) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.Warning, null, tint = StatusWarning, modifier = Modifier.size(20.dp))
+                            Text("Sin vehículos registrados", style = MaterialTheme.typography.bodySmall, color = StatusWarning)
+                        }
+                    } else {
+                        vehiculosResidente.forEach { v ->
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                                Icon(Icons.Default.DirectionsCar, null, tint = SecurityGreen, modifier = Modifier.size(20.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text("Placa esperada: ${v.placa}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                    v.descripcion?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                                    v.color?.let { Text("Color: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Step 3: Scan plate to confirm
+            item {
+                Button(
+                    onClick = { vm.abrirCamaraPlaca() },
+                    colors = ButtonDefaults.buttonColors(containerColor = SecurityGreen),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.CameraAlt, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("3. Escanear placa para confirmar")
+                }
+            }
+        }
+
+        // Result
+        placaResult?.let { (placa, vehiculo) ->
+            item {
+                val coincide = vehiculo != null
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (coincide) SecurityGreen.copy(alpha = 0.1f)
+                                         else StatusDanger.copy(alpha = 0.1f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            if (coincide) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                            null,
+                            tint = if (coincide) SecurityGreen else StatusDanger,
+                            modifier = Modifier.size(32.dp)
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Placa detectada: $placa",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                if (coincide) "ACCESO OK — Coincide con vehículo registrado"
+                                else "ALERTA — Placa no coincide con vehículo registrado",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (coincide) SecurityGreen else StatusDanger
+                            )
+                            vehiculo?.descripcion?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                         }
                     }
                 }

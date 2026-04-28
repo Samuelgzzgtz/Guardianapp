@@ -86,6 +86,12 @@ class SecurityRepository {
         }.decodeList()
     }
 
+    suspend fun getVehiculosPorResidente(userId: Int): Result<List<Vehiculo>> = runCatching {
+        client.postgrest["vehiculo"].select {
+            filter { eq("fkusuario", userId) }
+        }.decodeList()
+    }
+
     suspend fun getVehiculoPorPlaca(placa: String): Result<Vehiculo?> = runCatching {
         val placaNorm = placa.uppercase().replace(" ", "").replace("-", "")
         client.postgrest["vehiculo"].select().decodeList<Vehiculo>()

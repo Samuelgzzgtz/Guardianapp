@@ -12,7 +12,7 @@ import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
 
-class AuthRepository(context: Context) {
+class AuthRepository(private val context: Context) {
     private val client = SupabaseClientProvider.client
     private val session = SessionDataStore(context)
 
@@ -33,14 +33,33 @@ class AuthRepository(context: Context) {
         val usuario = client.postgrest["usuario"].select {
             filter { eq("email", email) }
         }.decodeSingle<Usuario>()
-        val token = client.auth.currentSessionOrNull()?.accessToken ?: ""
+        val accessToken = client.auth.currentSessionOrNull()?.accessToken ?: ""
         session.saveSession(
             userId = usuario.id,
             name = usuario.nombre,
             role = usuario.fkRolUsuario ?: 1,
             unit = "",
-            token = token
+            token = accessToken
         )
+        // Save FCM token to Supabase so Edge Functions can send push notifications
+        val fcmToken = context.getSharedPreferences("fcm", Context.MODE_PRIVATE).getString("token", null)
+        if (fcmToken != null) {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val baseUrl = SupabaseClientProvider.SUPABASE_URL
+                    val conn = URL("$baseUrl/rest/v1/usuario?id=eq.${usuario.id}").openConnection() as HttpURLConnection
+                    conn.requestMethod = "PATCH"
+                    conn.setRequestProperty("apikey", SupabaseClientProvider.SUPABASE_KEY)
+                    conn.setRequestProperty("Authorization", "Bearer $accessToken")
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.setRequestProperty("Prefer", "return=minimal")
+                    conn.doOutput = true
+                    conn.outputStream.use { it.write("""{"fcmtoken":"$fcmToken"}""".toByteArray()) }
+                    conn.responseCode
+                    conn.disconnect()
+                }
+            }
+        }
         usuario
     }
 

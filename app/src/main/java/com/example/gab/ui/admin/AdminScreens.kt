@@ -302,6 +302,7 @@ private fun CreateUserForm(
                                 ) {
                                     Text(
                                         u.displayUbicacion(),
+                                        modifier = Modifier.weight(1f),
                                         color = if (ocupada) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                                 else MaterialTheme.colorScheme.onSurface
                                     )

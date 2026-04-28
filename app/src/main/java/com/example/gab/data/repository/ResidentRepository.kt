@@ -60,7 +60,7 @@ class ResidentRepository(private val context: Context) {
     }
 
     suspend fun getAmenidades(): Result<List<Amenidad>> = runCatching {
-        client.postgrest["amenidad"].select().decodeList()
+        client.postgrest["amenidad"].select().decodeList<Amenidad>().distinctBy { it.id }
     }
 
     suspend fun getReservas(userId: Int): Result<List<Reserva>> = runCatching {
