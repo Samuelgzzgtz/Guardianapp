@@ -5,8 +5,13 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gab.data.model.*
+import com.example.gab.data.remote.SupabaseClientProvider
 import com.example.gab.data.repository.AdminRepository
 import com.example.gab.data.repository.AuthRepository
+import io.github.jan.supabase.realtime.PostgresAction
+import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.postgresChangeFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -55,6 +60,8 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     private val _createState  = MutableStateFlow<CreateUserState>(CreateUserState.Idle)
     val createState: StateFlow<CreateUserState> = _createState.asStateFlow()
 
+    private var realtimeJob: Job? = null
+
     fun loadAll() {
         viewModelScope.launch {
             _isLoading.value = true
@@ -67,6 +74,27 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             repo.getMorosos().onSuccess      { _morosos.value  = it }
             _isLoading.value = false
         }
+        startRealtime()
+    }
+
+    private fun startRealtime() {
+        realtimeJob?.cancel()
+        realtimeJob = viewModelScope.launch {
+            val channel = SupabaseClientProvider.client.channel("admin-reportes-live")
+            val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                table = "reporte"
+            }
+            channel.subscribe()
+            changes.collect {
+                repo.getReportes().onSuccess     { _reportes.value = it }
+                repo.getEstadisticas().onSuccess { _stats.value    = it }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        realtimeJob?.cancel()
     }
 
     fun filtrarUsuarios(rol: Int?) {
