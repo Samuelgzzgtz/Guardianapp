@@ -53,13 +53,13 @@ fun AppShell(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFFF57F17))
+                            .background(MaterialTheme.colorScheme.errorContainer)
                             .padding(horizontal = 16.dp, vertical = 6.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             "Sin conexión — modo offline",
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
                             fontSize = 12.sp
                         )
                     }

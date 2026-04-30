@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -140,6 +141,15 @@ fun CleaningHomeScreen(user: AppUser, vm: CleaningViewModel) {
                     }
                 }
             }
+        } else {
+            item {
+                Text(
+                    "Sin zonas asignadas",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
         }
     }
 }
@@ -150,7 +160,7 @@ fun CleaningTasksScreen(userId: Int, vm: CleaningViewModel) {
     val unidades  by vm.unidades.collectAsStateWithLifecycle()
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
 
-    var filterEstatus by remember { mutableStateOf<String?>(null) }
+    var filterEstatus by rememberSaveable { mutableStateOf<String?>(null) }
 
     val filtered = when (filterEstatus) {
         null         -> tareas
@@ -207,7 +217,9 @@ fun CleaningTasksScreen(userId: Int, vm: CleaningViewModel) {
                                     fontWeight = FontWeight.Medium,
                                     textDecoration = if (isCompletada) TextDecoration.LineThrough else null,
                                     color = if (isCompletada) MaterialTheme.colorScheme.onSurfaceVariant
-                                            else MaterialTheme.colorScheme.onSurface
+                                            else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 val priorityColor = when (tarea.prioridad) {
                                     "alta"   -> StatusDanger

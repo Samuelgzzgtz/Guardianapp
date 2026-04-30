@@ -109,7 +109,7 @@ fun RoleBadge(role: String, color: Color) {
         Text(
             text = role,
             color = Color.White,
-            fontSize = 10.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
         )

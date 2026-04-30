@@ -47,7 +47,21 @@ class ResidentRepository(private val context: Context) {
     ): Result<Unit> = runCatching {
         var fotoUrl: String? = null
         if (fotoUri != null) {
-            val bytes = context.contentResolver.openInputStream(fotoUri)?.readBytes()
+            val bmp = android.graphics.BitmapFactory.decodeStream(
+                context.contentResolver.openInputStream(fotoUri)
+            )
+            val bytes = if (bmp != null) {
+                var quality = 85
+                var out: java.io.ByteArrayOutputStream
+                do {
+                    out = java.io.ByteArrayOutputStream()
+                    bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, out)
+                    quality -= 10
+                } while (out.size() > 500_000 && quality > 20)
+                out.toByteArray()
+            } else {
+                context.contentResolver.openInputStream(fotoUri)?.readBytes()
+            }
             if (bytes != null) {
                 val fileName = "reporte_${System.currentTimeMillis()}.jpg"
                 client.storage["fotos-reportes"].upload(fileName, bytes) { upsert = true }
@@ -71,7 +85,7 @@ class ResidentRepository(private val context: Context) {
 
     suspend fun crearReserva(userId: Int, amenidadId: Int, fecha: String, slot: String): Result<Unit> = runCatching {
         client.postgrest["reserva"].insert(
-            Reserva(fkUsuario = userId, fkAmenidad = amenidadId, fechaReservacion = fecha, horarioSlot = slot)
+            Reserva(fkUsuario = userId, fkAmenidad = amenidadId, fecha = fecha, slot = slot)
         )
     }
 
@@ -85,10 +99,10 @@ class ResidentRepository(private val context: Context) {
         client.postgrest["reserva"].select {
             filter {
                 eq("fkamenidad", amenidadId)
-                eq("fechareservacion", fecha)
+                eq("fecha", fecha)
                 eq("estatus", "activa")
             }
-        }.decodeList<Reserva>().mapNotNull { it.horarioSlot }
+        }.decodeList<Reserva>().mapNotNull { it.slot }
     }
 
     suspend fun crearReservaConValidacion(
@@ -97,14 +111,14 @@ class ResidentRepository(private val context: Context) {
         val tomados = client.postgrest["reserva"].select {
             filter {
                 eq("fkamenidad", amenidadId)
-                eq("fechareservacion", fecha)
-                eq("horarioslot", slot)
+                eq("fecha", fecha)
+                eq("slot", slot)
                 eq("estatus", "activa")
             }
         }.decodeList<Reserva>()
         if (tomados.isNotEmpty()) error("Este horario ya está reservado. Elige otro.")
         client.postgrest["reserva"].insert(
-            Reserva(fkUsuario = userId, fkAmenidad = amenidadId, fechaReservacion = fecha, horarioSlot = slot)
+            Reserva(fkUsuario = userId, fkAmenidad = amenidadId, fecha = fecha, slot = slot)
         )
     }
 

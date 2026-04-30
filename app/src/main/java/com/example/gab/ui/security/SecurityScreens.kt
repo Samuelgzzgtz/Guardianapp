@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -130,11 +131,20 @@ fun SecurityHomeScreen(user: AppUser, vm: SecurityViewModel, navController: NavC
                         )
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("$nombre – ${log.direccion}", style = MaterialTheme.typography.bodyMedium)
+                            Text("$nombre – ${log.direccion}", style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(log.horaRegistro ?: "—", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
+            }
+        } else {
+            item {
+                Text(
+                    "Sin eventos recientes",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(16.dp)
+                )
             }
         }
     }
@@ -188,7 +198,7 @@ fun SecurityVisitorsScreen(user: AppUser, vm: SecurityViewModel, navController: 
                 }
             }
 
-            items(accesoLog.reversed()) { log ->
+            items(accesoLog.reversed(), key = { it.id ?: it.horaRegistro }) { log ->
                 val nombre    = residentes.find { it.id == log.fkResidente }?.nombre ?: "Residente #${log.fkResidente ?: "—"}"
                 val isEntrada = log.direccion == "ENTRADA"
                 GuardianCard {
@@ -688,9 +698,9 @@ private fun IncidenteCard(inc: Reporte) {
                     StatusChip(inc.estatus, when (inc.estatus) { "Resuelto" -> StatusSuccess; "En proceso" -> StatusInfo; else -> StatusWarning })
                 }
                 Spacer(Modifier.height(2.dp))
-                Text(inc.titulo, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                Text(inc.titulo, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 inc.descripcion?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
                 Text(inc.fechaCreacion ?: "—", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

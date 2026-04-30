@@ -13,11 +13,13 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -146,8 +148,8 @@ fun AdminUsersScreen(vm: AdminViewModel) {
     val isLoading           by vm.isLoading.collectAsStateWithLifecycle()
     val createState         by vm.createState.collectAsStateWithLifecycle()
 
-    var searchQuery          by remember { mutableStateOf("") }
-    var rolFiltro            by remember { mutableStateOf<Int?>(null) }
+    var searchQuery          by rememberSaveable { mutableStateOf("") }
+    var rolFiltro            by rememberSaveable { mutableStateOf<Int?>(null) }
     var showBottomSheet      by remember { mutableStateOf(false) }
     var selectedLimpiezaUser by remember { mutableStateOf<Usuario?>(null) }
     var selectedResidente    by remember { mutableStateOf<Usuario?>(null) }
@@ -194,7 +196,7 @@ fun AdminUsersScreen(vm: AdminViewModel) {
                 item { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("No hay usuarios", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
             }
 
-            items(filtered) { u ->
+            items(filtered, key = { it.id }) { u ->
                 UserCard(
                     u,
                     onRoleChange   = { vm.actualizarRol(u.id, it) },
@@ -248,6 +250,7 @@ fun AdminUsersScreen(vm: AdminViewModel) {
             usuario   = res,
             unidad    = unidad,
             cuotas    = cuotasUsuario,
+            vm        = vm,
             onDismiss = { selectedResidente = null }
         )
     }
@@ -506,7 +509,7 @@ fun AdminReportsScreen(vm: AdminViewModel) {
             }
         }
 
-        items(filtered) { r ->
+        items(filtered, key = { it.id ?: it.titulo }) { r ->
             AdminReportCard(r, onStatusChange = { newStatus -> vm.actualizarEstatusReporte(r.id ?: return@AdminReportCard, newStatus) })
         }
     }
@@ -758,7 +761,7 @@ private fun AsignarResidenteDialog(
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     }
                 }
-                items(residentes.filter { it.id != residenteActual?.id }) { r ->
+                items(residentes.filter { it.id != residenteActual?.id }, key = { it.id }) { r ->
                     OutlinedButton(onClick = { onAssign(r.id) }, modifier = Modifier.fillMaxWidth()) {
                         Text(r.nombre)
                     }
@@ -1037,6 +1040,7 @@ private fun ResidenteDetalleDialog(
     usuario: Usuario,
     unidad: Unidad?,
     cuotas: List<Cuota>,
+    vm: AdminViewModel,
     onDismiss: () -> Unit
 ) {
     val cuotaActiva = cuotas.firstOrNull { it.estatus != "pagado" } ?: cuotas.firstOrNull()
@@ -1053,7 +1057,7 @@ private fun ResidenteDetalleDialog(
                     )
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(usuario.nombre, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(usuario.nombre, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(usuario.email ?: "—", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null) }
@@ -1114,6 +1118,21 @@ private fun ResidenteDetalleDialog(
                     if (cuotas.size > 1) {
                         Text("${cuotas.size} cuotas en total · ${cuotas.count { it.estatus == "pagado" }} pagadas",
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (cuotaActiva.estatus != "pagado") {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                vm.marcarCuotaPagada(cuotaActiva.id)
+                                onDismiss()
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Marcar como pagado")
+                        }
                     }
                 } else if (cuotas.isEmpty()) {
                     Text("Sin cuotas registradas", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

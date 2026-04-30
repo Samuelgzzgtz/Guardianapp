@@ -105,7 +105,7 @@ fun ResidentProfileScreen(user: AppUser, vm: ResidentViewModel, onLogout: () -> 
                         Image(
                             bitmap = qrBitmap.asImageBitmap(),
                             contentDescription = "Código QR de acceso",
-                            modifier = Modifier.size(180.dp)
+                            modifier = Modifier.size(200.dp)
                         )
                     } else {
                         Text("No se pudo generar el QR", color = StatusDanger, style = MaterialTheme.typography.bodySmall)

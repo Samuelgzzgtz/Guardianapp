@@ -201,17 +201,21 @@ class SecurityViewModel : ViewModel() {
                 _toastMessage.value = "No se detectó placa. Intenta con mejor iluminación."
                 return@launch
             }
+            val placaNormalizada = placaEncontrada
+                .trim()
+                .replace(" ", "")
+                .replace("-", "")
+                .uppercase()
             // If a resident is pre-selected, verify the plate against their registered vehicles
             val residente = _residenteParaPlaca.value
             val vehiculoCorrecto = if (residente != null) {
                 _vehiculosResidente.value.firstOrNull { v ->
-                    v.placa.uppercase().replace(" ", "").replace("-", "") ==
-                        placaEncontrada.uppercase().replace(" ", "").replace("-", "")
+                    v.placa.uppercase().replace(" ", "").replace("-", "") == placaNormalizada
                 }
             } else {
-                repo.getVehiculoPorPlaca(placaEncontrada).getOrNull()
+                repo.getVehiculoPorPlaca(placaNormalizada).getOrNull()
             }
-            _placaResultado.value = Pair(placaEncontrada, vehiculoCorrecto)
+            _placaResultado.value = Pair(placaNormalizada, vehiculoCorrecto)
             if (vehiculoCorrecto != null) {
                 repo.guardarVisita("Vehículo ${vehiculoCorrecto.placa} (${vehiculoCorrecto.descripcion ?: ""})", guardiaId, "PLACA")
                     .onSuccess { repo.getVisitas().onSuccess { _visitas.value = it } }

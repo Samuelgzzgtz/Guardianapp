@@ -26,7 +26,7 @@ fun ResidentReportsScreen(user: AppUser, navController: NavController, vm: Resid
     val reportes  by vm.reportes.collectAsStateWithLifecycle()
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
 
-    var selectedFilter  by remember { mutableStateOf("Todos") }
+    var selectedFilter  by rememberSaveable { mutableStateOf("Todos") }
     var showNewDialog   by remember { mutableStateOf(false) }
     var reportToClose   by remember { mutableStateOf<Reporte?>(null) }
     val filters = listOf("Todos", "Pendiente", "En proceso", "Resuelto")

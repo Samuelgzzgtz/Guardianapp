@@ -23,7 +23,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val repo = AuthRepository(application)
     private val sessionStore = SessionDataStore(application)
 
-    private val _uiState = MutableStateFlow<AuthState>(AuthState.Idle)
+    private val _uiState = MutableStateFlow<AuthState>(AuthState.Loading)
     val uiState: StateFlow<AuthState> = _uiState.asStateFlow()
 
     init {
@@ -32,11 +32,17 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun checkSession() {
         viewModelScope.launch {
-            val userId = sessionStore.userId.firstOrNull()
-            val role = sessionStore.userRole.firstOrNull()
-            val token = sessionStore.authToken.firstOrNull()
-            if (userId != null && role != null && !token.isNullOrBlank()) {
-                _uiState.value = AuthState.SessionRestored(userId, role)
+            try {
+                val userId = sessionStore.userId.firstOrNull()
+                val role = sessionStore.userRole.firstOrNull()
+                val token = sessionStore.authToken.firstOrNull()
+                if (userId != null && role != null && !token.isNullOrBlank()) {
+                    _uiState.value = AuthState.SessionRestored(userId, role)
+                } else {
+                    _uiState.value = AuthState.Idle
+                }
+            } catch (e: Exception) {
+                _uiState.value = AuthState.Idle
             }
         }
     }

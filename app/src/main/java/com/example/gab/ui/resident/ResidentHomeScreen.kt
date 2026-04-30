@@ -100,7 +100,7 @@ fun ResidentHomeScreen(user: AppUser, navController: NavController, vm: Resident
                 Text(user.name.ifBlank { "Residente" }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 if (unidad != null) {
                     Text(
-                        unidad!!.displayUbicacion(),
+                        unidad.displayUbicacion(),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

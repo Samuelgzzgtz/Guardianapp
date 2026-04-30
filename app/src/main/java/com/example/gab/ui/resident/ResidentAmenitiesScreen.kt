@@ -84,8 +84,8 @@ fun ResidentAmenitiesScreen(user: AppUser, vm: ResidentViewModel) {
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text("Reserva #${reserva.id ?: "—"}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                            Text("Fecha: ${reserva.fechaReservacion ?: "—"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            reserva.horarioSlot?.let {
+                            Text("Fecha: ${reserva.fecha ?: "—"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            reserva.slot?.let {
                                 Text("Horario: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             StatusChip(reserva.estatus,
@@ -142,6 +142,7 @@ private fun NewReservaDialog(
 ) {
     var fecha by remember { mutableStateOf("") }
     var slot  by remember { mutableStateOf("08:00 - 10:00") }
+    val today = java.time.LocalDate.now().toString()
     val allSlots = listOf(
         "08:00 - 10:00", "10:00 - 12:00", "12:00 - 14:00",
         "14:00 - 16:00", "16:00 - 18:00", "18:00 - 20:00"
@@ -155,8 +156,12 @@ private fun NewReservaDialog(
                 OutlinedTextField(
                     value = fecha,
                     onValueChange = {
-                        fecha = it
-                        if (it.length == 10) onFechaChange(it)
+                        if (it.length == 10 && it >= today) {
+                            fecha = it
+                            onFechaChange(it)
+                        } else if (it.length < 10) {
+                            fecha = it
+                        }
                     },
                     label = { Text("Fecha (YYYY-MM-DD)") },
                     placeholder = { Text("2026-05-01") },
@@ -208,7 +213,7 @@ private fun NewReservaDialog(
         confirmButton = {
             Button(
                 onClick  = { if (fecha.isNotBlank() && slot !in slotsTomados) onSubmit(fecha, slot) },
-                enabled  = fecha.length == 10 && slot !in slotsTomados,
+                enabled  = fecha.length == 10 && fecha >= today && slot !in slotsTomados,
                 colors   = ButtonDefaults.buttonColors(containerColor = ResidentBlue)
             ) { Text("Confirmar") }
         },

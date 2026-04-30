@@ -105,6 +105,12 @@ class AdminRepository {
         }.decodeList()
     }
 
+    suspend fun marcarCuotaPagada(cuotaId: Int): Result<Unit> = runCatching {
+        client.postgrest["cuota"].update({ set("estatus", "pagado") }) {
+            filter { eq("id", cuotaId) }
+        }
+    }
+
     suspend fun eliminarUsuarioCompleto(userId: Int, email: String): Result<Unit> = runCatching {
         val serviceKey = SupabaseClientProvider.SUPABASE_SERVICE_KEY
         val baseUrl    = SupabaseClientProvider.SUPABASE_URL
@@ -159,7 +165,7 @@ class AdminRepository {
     suspend fun getTareasLimpieza(userId: Int): Result<List<TareaLimpieza>> = runCatching {
         client.postgrest["tarealimpieza"].select {
             filter { eq("fkasignado", userId) }
-            order("id", Order.ASCENDING)
+            order("fk_unidad", Order.ASCENDING)
         }.decodeList()
     }
 

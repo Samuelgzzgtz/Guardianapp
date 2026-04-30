@@ -91,8 +91,8 @@ data class Reserva(
     @SerialName("id") val id: Int? = null,
     @SerialName("fkusuario") val fkUsuario: Int? = null,
     @SerialName("fkamenidad") val fkAmenidad: Int? = null,
-    @SerialName("fechareservacion") val fechaReservacion: String? = null,
-    @SerialName("horarioslot") val horarioSlot: String? = null,
+    @SerialName("fecha") val fecha: String? = null,
+    @SerialName("slot") val slot: String? = null,
     @SerialName("estatus") val estatus: String = "activa"
 )
 

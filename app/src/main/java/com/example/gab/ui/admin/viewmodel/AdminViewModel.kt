@@ -205,6 +205,20 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun marcarCuotaPagada(cuotaId: Int) {
+        viewModelScope.launch {
+            repo.marcarCuotaPagada(cuotaId)
+                .onSuccess { loadUsuarios() }
+                .onFailure { Log.e("AdminVM", "marcarCuotaPagada error", it) }
+        }
+    }
+
+    private fun loadUsuarios() {
+        viewModelScope.launch {
+            repo.getUsuarios().onSuccess { _usuarios.value = it }
+        }
+    }
+
     fun crearTareaLimpieza(asignadoId: Int, titulo: String, area: String?, prioridad: String, notas: String?) {
         val fecha = java.time.LocalDate.now().toString()
         viewModelScope.launch {

@@ -1,6 +1,11 @@
 package com.example.gab.ui.navigation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gab.data.model.Usuario
@@ -84,22 +89,33 @@ fun GuardianApp(authViewModel: AuthViewModel = viewModel()) {
         }
     }
 
-    if (currentUser == null) {
-        LoginScreen(
-            viewModel = authViewModel,
-            onLogin = { user -> currentUser = user }
-        )
-    } else {
-        val user = currentUser!!
-        val onLogout: () -> Unit = {
-            authViewModel.logout()
-            currentUser = null
+    when {
+        uiState is AuthState.Loading -> {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
         }
-        when (user.role) {
-            UserRole.RESIDENT -> ResidentShell(user = user, onLogout = onLogout)
-            UserRole.SECURITY -> SecurityShell(user = user, onLogout = onLogout)
-            UserRole.ADMIN    -> AdminShell(user = user, onLogout = onLogout)
-            UserRole.CLEANING -> CleaningShell(user = user, onLogout = onLogout)
+        currentUser == null -> {
+            LoginScreen(
+                viewModel = authViewModel,
+                onLogin = { user -> currentUser = user }
+            )
+        }
+        else -> {
+            val user = currentUser ?: return@GuardianApp
+            val onLogout: () -> Unit = {
+                authViewModel.logout()
+                currentUser = null
+            }
+            when (user.role) {
+                UserRole.RESIDENT -> ResidentShell(user = user, onLogout = onLogout)
+                UserRole.SECURITY -> SecurityShell(user = user, onLogout = onLogout)
+                UserRole.ADMIN    -> AdminShell(user = user, onLogout = onLogout)
+                UserRole.CLEANING -> CleaningShell(user = user, onLogout = onLogout)
+            }
         }
     }
 }
