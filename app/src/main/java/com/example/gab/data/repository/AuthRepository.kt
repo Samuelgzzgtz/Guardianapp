@@ -34,13 +34,16 @@ class AuthRepository(private val context: Context) {
             filter { eq("email", email) }
         }.decodeSingleOrNull<Usuario>()
             ?: error("Perfil de usuario no encontrado. Contacta al administrador.")
-        val accessToken = client.auth.currentSessionOrNull()?.accessToken ?: ""
+        val supaSession  = client.auth.currentSessionOrNull()
+        val accessToken  = supaSession?.accessToken  ?: ""
+        val refreshToken = supaSession?.refreshToken ?: ""
         session.saveSession(
-            userId = usuario.id,
-            name = usuario.nombre,
-            role = usuario.fkRolUsuario ?: 1,
-            unit = "",
-            token = accessToken
+            userId       = usuario.id,
+            name         = usuario.nombre,
+            role         = usuario.fkRolUsuario ?: 1,
+            unit         = "",
+            token        = accessToken,
+            refreshToken = refreshToken
         )
         usuario
     }
@@ -184,7 +187,55 @@ class AuthRepository(private val context: Context) {
         }
     }
 
+    // Returns new access token, or null if refresh failed (token expired / invalid)
+    suspend fun refreshSession(refreshToken: String): String? = runCatching {
+        withContext(Dispatchers.IO) {
+            val conn = URL("${SupabaseClientProvider.SUPABASE_URL}/auth/v1/token?grant_type=refresh_token")
+                .openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("apikey", SupabaseClientProvider.SUPABASE_KEY)
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.doInput  = true
+            conn.outputStream.use { it.write("""{"refresh_token":"$refreshToken"}""".toByteArray()) }
+            val code = conn.responseCode
+            if (code !in 200..299) { conn.disconnect(); return@withContext null }
+            val body       = conn.inputStream.bufferedReader().readText()
+            conn.disconnect()
+            val newAccess  = body.substringAfter("\"access_token\":\"").substringBefore("\"")
+            val newRefresh = body.substringAfter("\"refresh_token\":\"").substringBefore("\"")
+            val userId = session.userId.firstOrNull()
+            val name   = session.userName.firstOrNull() ?: ""
+            val role   = session.userRole.firstOrNull() ?: 1
+            if (userId != null && newAccess.isNotBlank()) {
+                session.saveSession(
+                    userId = userId, name = name, role = role, unit = "",
+                    token = newAccess, refreshToken = newRefresh
+                )
+            }
+            newAccess.takeIf { it.isNotBlank() }
+        }
+    }.getOrNull()
+
+    suspend fun saveFcmToken(userId: Int, fcmToken: String) = runCatching {
+        withContext(Dispatchers.IO) {
+            val token = session.authToken.firstOrNull() ?: ""
+            val conn = URL("${SupabaseClientProvider.SUPABASE_URL}/rest/v1/usuario?id=eq.$userId")
+                .openConnection() as HttpURLConnection
+            conn.requestMethod = "PATCH"
+            conn.setRequestProperty("apikey", SupabaseClientProvider.SUPABASE_KEY)
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("Prefer", "return=minimal")
+            conn.doOutput = true
+            conn.outputStream.use { it.write("""{"fcm_token":"$fcmToken"}""".toByteArray()) }
+            conn.responseCode
+            conn.disconnect()
+        }
+    }
+
     fun currentUserFlow() = session.userId
     fun currentRoleFlow() = session.userRole
-    fun authTokenFlow() = session.authToken
+    fun authTokenFlow()   = session.authToken
+    fun refreshTokenFlow() = session.refreshToken
 }

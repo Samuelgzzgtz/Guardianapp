@@ -7,6 +7,7 @@ import com.example.gab.data.local.SessionDataStore
 import com.example.gab.data.local.sessionDataStore
 import com.example.gab.data.model.Usuario
 import com.example.gab.data.repository.AuthRepository
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -33,11 +34,25 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun checkSession() {
         viewModelScope.launch {
             try {
-                val userId = sessionStore.userId.firstOrNull()
-                val role = sessionStore.userRole.firstOrNull()
-                val token = sessionStore.authToken.firstOrNull()
+                val userId  = sessionStore.userId.firstOrNull()
+                val role    = sessionStore.userRole.firstOrNull()
+                val token   = sessionStore.authToken.firstOrNull()
+                val refresh = sessionStore.refreshToken.firstOrNull()
+
                 if (userId != null && role != null && !token.isNullOrBlank()) {
-                    _uiState.value = AuthState.SessionRestored(userId, role)
+                    if (!refresh.isNullOrBlank()) {
+                        val newToken = repo.refreshSession(refresh)
+                        if (newToken != null) {
+                            _uiState.value = AuthState.SessionRestored(userId, role)
+                        } else {
+                            sessionStore.clearSession()
+                            _uiState.value = AuthState.Idle
+                        }
+                    } else {
+                        // Sesión legacy sin refresh token — forzar re-login
+                        sessionStore.clearSession()
+                        _uiState.value = AuthState.Idle
+                    }
                 } else {
                     _uiState.value = AuthState.Idle
                 }
@@ -51,7 +66,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _uiState.value = AuthState.Loading
             repo.signIn(email, password)
-                .onSuccess { user -> _uiState.value = AuthState.Success(user) }
+                .onSuccess { user ->
+                    _uiState.value = AuthState.Success(user)
+                    FirebaseMessaging.getInstance().token.addOnSuccessListener { fcmToken ->
+                        viewModelScope.launch { repo.saveFcmToken(user.id, fcmToken) }
+                    }
+                }
                 .onFailure { e -> _uiState.value = AuthState.Error(e.message ?: "Error de autenticación") }
         }
     }

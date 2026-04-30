@@ -94,9 +94,8 @@ class SecurityRepository {
 
     suspend fun getVehiculoPorPlaca(placa: String): Result<Vehiculo?> = runCatching {
         val placaNorm = placa.uppercase().replace(" ", "").replace("-", "")
-        client.postgrest["vehiculo"].select().decodeList<Vehiculo>()
-            .firstOrNull { v ->
-                v.placa.uppercase().replace(" ", "").replace("-", "") == placaNorm
-            }
+        client.postgrest["vehiculo"].select {
+            filter { ilike("placa", placaNorm) }
+        }.decodeList<Vehiculo>().firstOrNull()
     }
 }

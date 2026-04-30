@@ -10,28 +10,38 @@ import kotlinx.coroutines.flow.map
 val Context.sessionDataStore: DataStore<Preferences> by preferencesDataStore(name = "guardian_session")
 
 object SessionKeys {
-    val USER_ID    = intPreferencesKey("user_id")
-    val USER_NAME  = stringPreferencesKey("user_name")
-    val USER_ROLE  = intPreferencesKey("user_role")
-    val USER_UNIT  = stringPreferencesKey("user_unit")
-    val AUTH_TOKEN = stringPreferencesKey("auth_token")
+    val USER_ID       = intPreferencesKey("user_id")
+    val USER_NAME     = stringPreferencesKey("user_name")
+    val USER_ROLE     = intPreferencesKey("user_role")
+    val USER_UNIT     = stringPreferencesKey("user_unit")
+    val AUTH_TOKEN    = stringPreferencesKey("auth_token")
+    val REFRESH_TOKEN = stringPreferencesKey("refresh_token")
 }
 
 class SessionDataStore(private val context: Context) {
 
-    val userId: Flow<Int?> = context.sessionDataStore.data.map { it[SessionKeys.USER_ID] }
+    val userId: Flow<Int?>      = context.sessionDataStore.data.map { it[SessionKeys.USER_ID] }
     val userName: Flow<String?> = context.sessionDataStore.data.map { it[SessionKeys.USER_NAME] }
-    val userRole: Flow<Int?> = context.sessionDataStore.data.map { it[SessionKeys.USER_ROLE] }
+    val userRole: Flow<Int?>    = context.sessionDataStore.data.map { it[SessionKeys.USER_ROLE] }
     val userUnit: Flow<String?> = context.sessionDataStore.data.map { it[SessionKeys.USER_UNIT] }
     val authToken: Flow<String?> = context.sessionDataStore.data.map { it[SessionKeys.AUTH_TOKEN] }
+    val refreshToken: Flow<String?> = context.sessionDataStore.data.map { it[SessionKeys.REFRESH_TOKEN] }
 
-    suspend fun saveSession(userId: Int, name: String, role: Int, unit: String, token: String) {
+    suspend fun saveSession(
+        userId: Int,
+        name: String,
+        role: Int,
+        unit: String,
+        token: String,
+        refreshToken: String = ""
+    ) {
         context.sessionDataStore.edit { prefs ->
-            prefs[SessionKeys.USER_ID]    = userId
-            prefs[SessionKeys.USER_NAME]  = name
-            prefs[SessionKeys.USER_ROLE]  = role
-            prefs[SessionKeys.USER_UNIT]  = unit
-            prefs[SessionKeys.AUTH_TOKEN] = token
+            prefs[SessionKeys.USER_ID]       = userId
+            prefs[SessionKeys.USER_NAME]     = name
+            prefs[SessionKeys.USER_ROLE]     = role
+            prefs[SessionKeys.USER_UNIT]     = unit
+            prefs[SessionKeys.AUTH_TOKEN]    = token
+            prefs[SessionKeys.REFRESH_TOKEN] = refreshToken
         }
     }
 

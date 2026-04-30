@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.google.services)
 }
 
 android {
@@ -72,6 +73,10 @@ dependencies {
 
     // Accompanist Permissions
     implementation("com.google.accompanist:accompanist-permissions:0.36.0")
+
+    // Firebase
+    implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
+    implementation("com.google.firebase:firebase-messaging-ktx")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
