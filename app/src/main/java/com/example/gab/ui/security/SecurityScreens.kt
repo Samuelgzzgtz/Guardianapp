@@ -198,7 +198,7 @@ fun SecurityVisitorsScreen(user: AppUser, vm: SecurityViewModel, navController: 
                 }
             }
 
-            items(accesoLog.reversed(), key = { it.id ?: it.horaRegistro }) { log ->
+            items(accesoLog.reversed(), key = { "${it.id}_${it.horaRegistro}" }) { log ->
                 val nombre    = residentes.find { it.id == log.fkResidente }?.nombre ?: "Residente #${log.fkResidente ?: "—"}"
                 val isEntrada = log.direccion == "ENTRADA"
                 GuardianCard {

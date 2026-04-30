@@ -88,7 +88,14 @@
       "Bash(/c/Users/PC/AppData/Local/Android/Sdk/platform-tools/adb reverse *)",
       "Bash(./gradlew assembleDebug --quiet)",
       "Bash(cp app/build/outputs/apk/debug/app-debug.apk \"C:/Users/PC/Desktop/gabThomas.apk\")",
-      "Read(//c/Users/PC/Desktop/**)"
+      "Read(//c/Users/PC/Desktop/**)",
+      "Bash(sed -n '144,150p' /c/Users/PC/AndroidStudioProjects/GAB/app/src/main/java/com/example/gab/data/model/Models.kt)",
+      "Bash(sed -n '89,93p' /c/Users/PC/AndroidStudioProjects/GAB/app/src/main/java/com/example/gab/data/repository/SecurityRepository.kt)",
+      "Bash(sed -n '148,152p' /c/Users/PC/AndroidStudioProjects/GAB/app/src/main/java/com/example/gab/data/repository/ResidentRepository.kt)",
+      "Bash(sort -k1 -t: -n)",
+      "Bash(identify /c/Users/PC/AndroidStudioProjects/GAB/app/src/main/res/mipmap-xxhdpi/ic_launcher.png)",
+      "Bash(xargs grep *)",
+      "Bash(xargs ls *)"
     ]
   }
 }

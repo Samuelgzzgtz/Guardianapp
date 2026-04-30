@@ -13,10 +13,7 @@ class CleaningRepository {
     suspend fun getTareas(asignadoId: Int, fecha: String): Result<List<TareaLimpieza>> = runCatching {
         // Fetch tasks for today, include both assigned to this user AND unassigned (resident requests)
         client.postgrest["tarealimpieza"].select {
-            filter {
-                eq("fecha", fecha)
-                or("fkasignado.eq.${asignadoId},fkasignado.is.null")
-            }
+            filter { eq("fecha", fecha) }
             order("fk_unidad", Order.ASCENDING)
         }.decodeList<TareaLimpieza>().filter { it.fkAsignado == asignadoId || it.fkAsignado == null }
     }
