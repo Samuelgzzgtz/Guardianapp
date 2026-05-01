@@ -73,18 +73,18 @@ class SecurityViewModel : ViewModel() {
         startRealtime()
     }
 
+    private var realtimeChannel: io.github.jan.supabase.realtime.RealtimeChannel? = null
+
     fun startRealtime() {
         realtimeJob?.cancel()
         realtimeJob = viewModelScope.launch {
-            val client  = SupabaseClientProvider.client
-            val channel = client.channel("security-acceso-live")
-            val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                table = "accesolog"
-            }
+            val channel = SupabaseClientProvider.client.channel("security-acceso-live")
+            realtimeChannel = channel
+            val accesoChanges    = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "accesolog" }
+            val incidenteChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "reporte" }
             channel.subscribe()
-            changes.collect {
-                repo.getAccesoLog().onSuccess { _accesoLog.value = it }
-            }
+            launch { accesoChanges.collect    { repo.getAccesoLog().onSuccess  { _accesoLog.value  = it } } }
+            launch { incidenteChanges.collect { repo.getIncidentes().onSuccess { _incidentes.value = it } } }
         }
     }
 
@@ -226,6 +226,9 @@ class SecurityViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         realtimeJob?.cancel()
+        viewModelScope.launch {
+            realtimeChannel?.let { runCatching { it.unsubscribe() } }
+        }
     }
 
     fun clearToast() { _toastMessage.value = null }

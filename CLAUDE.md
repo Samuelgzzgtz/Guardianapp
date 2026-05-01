@@ -57,7 +57,7 @@ util/
 
 Each Shell owns its own `NavController` + flat `NavHost`. There is **no nested navigation**. All route constants live in `Routes` object in `AppNavGraph.kt`.
 
-`AppShell.kt` is the shared `Scaffold` wrapper (TopBar + NetworkBanner + BottomNavigationBar). Navigation uses `launchSingleTop = true` with `inclusive = (item == startRoute)` — do not add a `currentRoute != item.route` guard.
+`AppShell.kt` is the shared `Scaffold` wrapper (TopBar + NetworkBanner + BottomNavigationBar). Navigation uses `launchSingleTop = true` with `inclusive = (item == startRoute)` — do not add a `currentRoute != item.route` guard. `popUpTo` always targets the **first item** in the `navItems` list; nav item ordering is therefore significant.
 
 ### Data layer
 
@@ -69,10 +69,12 @@ Each Shell owns its own `NavController` + flat `NavHost`. There is **no nested n
 
 ### Auth flow
 
-1. `AuthViewModel.init` → `checkSession()` reads DataStore; emits `SessionRestored` if token exists.
-2. Login → `AuthRepository.signIn` → Supabase Auth → matches `usuario` table by email → emits `AuthState.Success`.
+1. `AuthViewModel.init` → `checkSession()` reads DataStore; emits `SessionRestored` if token exists. On token expiry, `refreshSession()` hits Supabase REST to exchange the refresh token and persists the new access token — the user is never re-prompted.
+2. Login → `AuthRepository.signIn` → Supabase Auth → checks `supaUser.emailConfirmedAt != null` (blocks login with "Verifica tu correo" if null) → matches `usuario` table by email → emits `AuthState.Success`.
 3. Admin user creation: calls Supabase admin REST API (`/auth/v1/admin/users`) then POST `/auth/v1/resend` to auto-send confirmation email. Requires `ADMIN_SERVICE_KEY` from `Secrets.kt`.
 4. Full user deletion: deletes child rows (vehiculo, notificacion, cuota, reporte, reserva, tarealimpieza, accesolog) + `usuario` row + `auth.users` via admin API.
+
+`SessionDataStore` persists: `userId`, `name`, `role`, `unit`, `token`, `refreshToken`. `AppUser` is reconstructed from DataStore on cold start without a Supabase round-trip.
 
 ### Role IDs (fkrolusuario)
 
@@ -86,6 +88,34 @@ Each Shell owns its own `NavController` + flat `NavHost`. There is **no nested n
 ### Unidad structure
 
 3 bloques (A, B, C) × 4 pisos × 5 deptos/piso = 60 unidades. `Unidad.displayUbicacion()` returns `"Bloque X · Piso N · Depto NN"`.
+
+### Repositories
+
+All repositories wrap Supabase calls in `runCatching { } → Result<T>`. Never call Supabase directly from a ViewModel.
+
+| Repository | Key operations |
+|---|---|
+| `AuthRepository` | `signIn`, `reenviarVerificacion`, `signOut`, `createUser`, `deleteUser` |
+| `AdminRepository` | `getEstadisticas`, `getUsuarios`, `actualizarRolUsuario`, `getReportes` |
+| `ResidentRepository` | cuota, reportes, reservas, avisos, limpieza requests |
+| `SecurityRepository` | acceso logs, vehiculos, incidentes |
+| `CleaningRepository` | tareas, areas, estatus updates |
+| `NotificacionRepository` | FCM token registration (no-op until FCM configured) |
+
+### Utility extensions (`util/Extensions.kt`)
+
+- `Cuota.calcularRecargo()` — 5% surcharge per 30-day overdue period, calculated client-side
+- `Cuota.diasParaPago()` — days until due date; negative = overdue; null if already paid
+- `Double.toMoneda()` — formats as `"$XX.XX"`
+
+### Reusable composables (`ui/common/Components.kt`)
+
+- `GuardianCard(onClick?)` — card wrapper, 16 dp content padding
+- `StatCard(label, value, icon, color)` — icon circle + numeric value display
+- `StatusChip(text, color)` / `RoleBadge(roleId)` — tinted label chips
+- `AvatarCircle(name)` — text initials with dynamic font sizing
+- `QuickActionButton(icon, label, color, onClick)` — card-based action tile
+- `SectionHeader(title)` / `EmptyState(message)` — layout helpers
 
 ## Known Pending Items
 

@@ -46,6 +46,9 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     private val _unidadesConEstatus = MutableStateFlow<List<UnidadConEstatus>>(emptyList())
     val unidadesConEstatus: StateFlow<List<UnidadConEstatus>> = _unidadesConEstatus.asStateFlow()
 
+    private val _avisos        = MutableStateFlow<List<Aviso>>(emptyList())
+    val avisos: StateFlow<List<Aviso>> = _avisos.asStateFlow()
+
     private val _morosos      = MutableStateFlow<List<MorosoRow>>(emptyList())
     val morosos: StateFlow<List<MorosoRow>> = _morosos.asStateFlow()
 
@@ -67,6 +70,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     val createState: StateFlow<CreateUserState> = _createState.asStateFlow()
 
     private var realtimeJob: Job? = null
+    private var realtimeChannel: io.github.jan.supabase.realtime.RealtimeChannel? = null
 
     fun loadAll() {
         viewModelScope.launch {
@@ -78,6 +82,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             repo.getUnidades().onSuccess           { _unidades.value          = it }
             repo.getUnidadesConEstatus().onSuccess { _unidadesConEstatus.value = it }
             repo.getMorosos().onSuccess      { _morosos.value  = it }
+            repo.getAvisos().onSuccess       { _avisos.value   = it }
             _isLoading.value = false
         }
         startRealtime()
@@ -87,8 +92,10 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         realtimeJob?.cancel()
         realtimeJob = viewModelScope.launch {
             val channel = SupabaseClientProvider.client.channel("admin-live")
+            realtimeChannel = channel
             val reporteChanges  = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "reporte" }
             val cleaningChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "tarealimpieza" }
+            val reservaChanges  = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "reserva" }
             channel.subscribe()
             launch {
                 reporteChanges.collect {
@@ -103,12 +110,21 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             }
+            launch {
+                reservaChanges.collect {
+                    repo.getReservas().onSuccess     { _reservas.value = it }
+                    repo.getEstadisticas().onSuccess { _stats.value    = it }
+                }
+            }
         }
     }
 
     override fun onCleared() {
         super.onCleared()
         realtimeJob?.cancel()
+        viewModelScope.launch {
+            realtimeChannel?.let { runCatching { it.unsubscribe() } }
+        }
     }
 
     fun filtrarUsuarios(rol: Int?) {
@@ -228,6 +244,25 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                     repo.getTareasLimpieza(asignadoId).onSuccess { _tareasLimpieza.value = it }
                 }
                 .onFailure { _toastMessage.value = "Error: ${it.message}" }
+        }
+    }
+
+    fun crearAviso(titulo: String, descripcion: String?, tono: String) {
+        viewModelScope.launch {
+            repo.crearAviso(titulo, descripcion, tono)
+                .onSuccess {
+                    _toastMessage.value = "Aviso publicado"
+                    repo.getAvisos().onSuccess { _avisos.value = it }
+                }
+                .onFailure { _toastMessage.value = "Error al publicar aviso: ${it.message}" }
+        }
+    }
+
+    fun eliminarAviso(avisoId: Int) {
+        viewModelScope.launch {
+            repo.eliminarAviso(avisoId)
+                .onSuccess { _avisos.value = _avisos.value.filter { it.id != avisoId } }
+                .onFailure { _toastMessage.value = "Error al eliminar aviso" }
         }
     }
 

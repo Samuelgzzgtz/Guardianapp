@@ -19,6 +19,7 @@ class CleaningViewModel : ViewModel() {
 
     private val repo = CleaningRepository()
     private var realtimeJob: Job? = null
+    private var realtimeChannel: io.github.jan.supabase.realtime.RealtimeChannel? = null
 
     private val _tareas = MutableStateFlow<List<TareaLimpieza>>(emptyList())
     val tareas: StateFlow<List<TareaLimpieza>> = _tareas.asStateFlow()
@@ -28,6 +29,11 @@ class CleaningViewModel : ViewModel() {
 
     private val _unidades = MutableStateFlow<Map<Int, Unidad>>(emptyMap())
     val unidades: StateFlow<Map<Int, Unidad>> = _unidades.asStateFlow()
+
+    private val _filtroArea = MutableStateFlow<String?>(null)
+    val filtroArea: StateFlow<String?> = _filtroArea.asStateFlow()
+
+    fun setFiltroArea(area: String?) { _filtroArea.value = area }
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -51,13 +57,20 @@ class CleaningViewModel : ViewModel() {
         realtimeJob?.cancel()
         realtimeJob = viewModelScope.launch {
             val channel = SupabaseClientProvider.client.channel("cleaning-$userId")
-            val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                table = "tarealimpieza"
-            }
+            realtimeChannel = channel
+            val tareaChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "tarealimpieza" }
+            val areaChanges  = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "areacomun" }
             channel.subscribe()
-            changes.collect {
-                val today = LocalDate.now().toString()
-                repo.getTareas(userId, today).onSuccess { _tareas.value = it }
+            launch {
+                tareaChanges.collect {
+                    val today = LocalDate.now().toString()
+                    repo.getTareas(userId, today).onSuccess { _tareas.value = it }
+                }
+            }
+            launch {
+                areaChanges.collect {
+                    repo.getAreas().onSuccess { _areas.value = it }
+                }
             }
         }
     }
@@ -65,6 +78,9 @@ class CleaningViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         realtimeJob?.cancel()
+        viewModelScope.launch {
+            realtimeChannel?.let { runCatching { it.unsubscribe() } }
+        }
     }
 
     fun toggleTarea(tareaId: Int, completada: Boolean) {
@@ -85,6 +101,14 @@ class CleaningViewModel : ViewModel() {
     }
 
     fun setEstatus(tareaId: Int, estatus: String, userId: Int) {
+        val current = _tareas.value.find { it.id == tareaId }?.estatus ?: return
+        val valid = when (current) {
+            "pendiente"  -> estatus == "en_proceso"
+            "en_proceso" -> estatus == "completada"
+            else         -> false
+        }
+        if (!valid) return
+
         _tareas.value = _tareas.value.map {
             if (it.id == tareaId) it.copy(estatus = estatus) else it
         }

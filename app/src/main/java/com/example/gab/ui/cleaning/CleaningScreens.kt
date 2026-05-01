@@ -61,14 +61,14 @@ fun CleaningShell(user: AppUser, onLogout: () -> Unit) {
         }
     ) {
         NavHost(navController = navController, startDestination = Routes.CLEANING_HOME) {
-            composable(Routes.CLEANING_HOME)  { CleaningHomeScreen(user, vm) }
+            composable(Routes.CLEANING_HOME)  { CleaningHomeScreen(user, navController, vm) }
             composable(Routes.CLEANING_TASKS) { CleaningTasksScreen(user.id, vm) }
         }
     }
 }
 
 @Composable
-fun CleaningHomeScreen(user: AppUser, vm: CleaningViewModel) {
+fun CleaningHomeScreen(user: AppUser, navController: androidx.navigation.NavController, vm: CleaningViewModel) {
     val tareas    by vm.tareas.collectAsStateWithLifecycle()
     val areas     by vm.areas.collectAsStateWithLifecycle()
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
@@ -123,12 +123,17 @@ fun CleaningHomeScreen(user: AppUser, vm: CleaningViewModel) {
         if (areas.isNotEmpty()) {
             item { SectionHeader("Zonas asignadas") }
             items(areas) { area ->
+                val nextEstatus = when (area.estatus) {
+                    "pendiente" -> "en_curso"
+                    "en_curso"  -> "listo"
+                    else        -> "pendiente"
+                }
                 val (statusLabel, statusColor) = when (area.estatus) {
                     "listo"    -> "Hecho"      to StatusSuccess
                     "en_curso" -> "En proceso" to StatusInfo
                     else       -> "Pendiente"  to StatusWarning
                 }
-                GuardianCard {
+                GuardianCard(onClick = { vm.actualizarArea(area.id, nextEstatus) }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.CleaningServices, null, tint = CleaningOrange, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(12.dp))
@@ -137,8 +142,21 @@ fun CleaningHomeScreen(user: AppUser, vm: CleaningViewModel) {
                             area.sector?.let {
                                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
+                            Text("Toca para cambiar estado", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                         }
-                        StatusChip(statusLabel, statusColor)
+                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            StatusChip(statusLabel, statusColor)
+                            TextButton(
+                                onClick = {
+                                    vm.setFiltroArea(area.nombre)
+                                    navController.navigate(Routes.CLEANING_TASKS)
+                                },
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            ) {
+                                Icon(Icons.Default.FilterList, null, modifier = Modifier.size(14.dp))
+                                Text("Ver tareas", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
                     }
                 }
             }
@@ -157,15 +175,17 @@ fun CleaningHomeScreen(user: AppUser, vm: CleaningViewModel) {
 
 @Composable
 fun CleaningTasksScreen(userId: Int, vm: CleaningViewModel) {
-    val tareas    by vm.tareas.collectAsStateWithLifecycle()
-    val unidades  by vm.unidades.collectAsStateWithLifecycle()
-    val isLoading by vm.isLoading.collectAsStateWithLifecycle()
+    val tareas     by vm.tareas.collectAsStateWithLifecycle()
+    val unidades   by vm.unidades.collectAsStateWithLifecycle()
+    val isLoading  by vm.isLoading.collectAsStateWithLifecycle()
+    val filtroArea by vm.filtroArea.collectAsStateWithLifecycle()
 
     var filterEstatus by rememberSaveable { mutableStateOf<String?>(null) }
 
-    val filtered = when (filterEstatus) {
-        null         -> tareas
-        else         -> tareas.filter { it.estatus == filterEstatus }
+    val filtered = when {
+        filterEstatus != null -> tareas.filter { it.estatus == filterEstatus }
+        filtroArea    != null -> tareas.filter { it.area == filtroArea }
+        else                  -> tareas
     }
 
     LazyColumn(
@@ -181,6 +201,29 @@ fun CleaningTasksScreen(userId: Int, vm: CleaningViewModel) {
                 FilterChip(selected = filterEstatus == "pendiente",  onClick = { filterEstatus = "pendiente"  }, label = { Text("Pendientes") })
                 FilterChip(selected = filterEstatus == "en_proceso", onClick = { filterEstatus = "en_proceso" }, label = { Text("En proceso") })
                 FilterChip(selected = filterEstatus == "completada", onClick = { filterEstatus = "completada" }, label = { Text("Hechas") })
+            }
+            if (filtroArea != null) {
+                Spacer(Modifier.height(8.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = CleaningOrange.copy(alpha = 0.10f)),
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.FilterList, null, modifier = Modifier.size(16.dp), tint = CleaningOrange)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Zona: $filtroArea", style = MaterialTheme.typography.labelMedium, color = CleaningOrange, modifier = Modifier.weight(1f))
+                        TextButton(
+                            onClick = { vm.setFiltroArea(null) },
+                            contentPadding = PaddingValues(horizontal = 4.dp)
+                        ) {
+                            Icon(Icons.Default.Close, null, modifier = Modifier.size(14.dp))
+                            Text("Quitar", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
             }
             if (isLoading) {
                 Spacer(Modifier.height(8.dp))
@@ -270,19 +313,39 @@ fun CleaningTasksScreen(userId: Int, vm: CleaningViewModel) {
 
 @Composable
 private fun EstatusCycleButton(estatus: String, onNext: (String) -> Unit) {
-    val (label, color) = when (estatus) {
-        "en_proceso" -> "En proceso" to StatusInfo
-        "completada" -> "Completado" to StatusSuccess
-        else         -> "Pendiente"  to StatusWarning
+    when (estatus) {
+        "completada" -> {
+            Surface(
+                shape = MaterialTheme.shapes.small,
+                color = StatusSuccess.copy(alpha = 0.12f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(14.dp), tint = StatusSuccess)
+                    Text("Hecho", style = MaterialTheme.typography.labelSmall, color = StatusSuccess)
+                }
+            }
+        }
+        else -> {
+            val (label, color) = when (estatus) {
+                "en_proceso" -> "En proceso" to StatusInfo
+                else         -> "Pendiente"  to StatusWarning
+            }
+            val next = when (estatus) {
+                "pendiente"  -> "en_proceso"
+                else         -> "completada"
+            }
+            AssistChip(
+                onClick = { onNext(next) },
+                label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = color.copy(alpha = 0.12f),
+                    labelColor = color
+                )
+            )
+        }
     }
-    val next = when (estatus) {
-        "pendiente"  -> "en_proceso"
-        "en_proceso" -> "completada"
-        else         -> "pendiente"
-    }
-    AssistChip(
-        onClick = { onNext(next) },
-        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-        colors = AssistChipDefaults.assistChipColors(containerColor = color.copy(alpha = 0.12f), labelColor = color)
-    )
 }

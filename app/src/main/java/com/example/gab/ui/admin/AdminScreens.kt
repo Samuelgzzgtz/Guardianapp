@@ -27,7 +27,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.ui.platform.LocalClipboardManager
+import android.content.ClipData
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -89,7 +92,11 @@ fun AdminShell(user: AppUser, onLogout: () -> Unit) {
 fun AdminDashboard(user: AppUser, vm: AdminViewModel) {
     val stats     by vm.stats.collectAsStateWithLifecycle()
     val morosos   by vm.morosos.collectAsStateWithLifecycle()
+    val avisos    by vm.avisos.collectAsStateWithLifecycle()
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
+
+    var showAvisoDialog  by remember { mutableStateOf(false) }
+    var avisoToDelete    by remember { mutableStateOf<com.example.gab.data.model.Aviso?>(null) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -118,6 +125,55 @@ fun AdminDashboard(user: AppUser, vm: AdminViewModel) {
             }
         }
 
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Avisos del condominio", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                TextButton(onClick = { showAvisoDialog = true }) {
+                    Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Nuevo aviso")
+                }
+            }
+        }
+
+        if (avisos.isEmpty()) {
+            item {
+                Text(
+                    "Sin avisos publicados",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                )
+            }
+        }
+
+        items(avisos, key = { it.id }) { aviso ->
+            val (icon, color) = when (aviso.tono) {
+                "warn"    -> Icons.Default.Warning     to StatusWarning
+                "success" -> Icons.Default.CheckCircle to StatusSuccess
+                else      -> Icons.Default.Info        to ResidentBlue
+            }
+            GuardianCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(icon, null, tint = color, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(aviso.titulo, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        aviso.descripcion?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                        }
+                    }
+                    IconButton(onClick = { avisoToDelete = aviso }) {
+                        Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+
         if (morosos.isNotEmpty()) {
             item { SectionHeader("Morosos (vencido > 30 días)") }
             items(morosos) { m ->
@@ -138,6 +194,89 @@ fun AdminDashboard(user: AppUser, vm: AdminViewModel) {
             }
         }
     }
+
+    if (showAvisoDialog) {
+        NuevoAvisoDialog(
+            onDismiss = { showAvisoDialog = false },
+            onSubmit  = { titulo, descripcion, tono ->
+                vm.crearAviso(titulo, descripcion, tono)
+                showAvisoDialog = false
+            }
+        )
+    }
+
+    avisoToDelete?.let { aviso ->
+        AlertDialog(
+            onDismissRequest = { avisoToDelete = null },
+            title = { Text("Eliminar aviso") },
+            text  = { Text("¿Eliminar el aviso \"${aviso.titulo}\"? Los residentes ya no lo verán.") },
+            confirmButton = {
+                Button(
+                    onClick = { vm.eliminarAviso(aviso.id); avisoToDelete = null },
+                    colors  = ButtonDefaults.buttonColors(containerColor = StatusDanger)
+                ) { Text("Eliminar") }
+            },
+            dismissButton = { TextButton(onClick = { avisoToDelete = null }) { Text("Cancelar") } }
+        )
+    }
+}
+
+@Composable
+private fun NuevoAvisoDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (titulo: String, descripcion: String?, tono: String) -> Unit
+) {
+    var titulo       by remember { mutableStateOf("") }
+    var descripcion  by remember { mutableStateOf("") }
+    var tono         by remember { mutableStateOf("primary") }
+    var tonoExpanded by remember { mutableStateOf(false) }
+
+    val tonos = listOf(
+        "primary" to "Informativo",
+        "warn"    to "Advertencia",
+        "success" to "Positivo"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nuevo aviso") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = titulo, onValueChange = { titulo = it },
+                    label = { Text("Título *") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true
+                )
+                OutlinedTextField(
+                    value = descripcion, onValueChange = { descripcion = it },
+                    label = { Text("Descripción (opcional)") },
+                    modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4
+                )
+                ExposedDropdownMenuBox(expanded = tonoExpanded, onExpandedChange = { tonoExpanded = it }) {
+                    val tonoLabel = tonos.find { it.first == tono }?.second ?: "Informativo"
+                    OutlinedTextField(
+                        value = tonoLabel, onValueChange = {}, readOnly = true,
+                        label = { Text("Tipo") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(tonoExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    )
+                    ExposedDropdownMenu(expanded = tonoExpanded, onDismissRequest = { tonoExpanded = false }) {
+                        tonos.forEach { (key, label) ->
+                            DropdownMenuItem(text = { Text(label) }, onClick = { tono = key; tonoExpanded = false })
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSubmit(titulo, descripcion.ifBlank { null }, tono) },
+                enabled = titulo.isNotBlank(),
+                colors  = ButtonDefaults.buttonColors(containerColor = AdminPurple)
+            ) { Text("Publicar") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
 }
 
 @Composable
@@ -564,6 +703,10 @@ fun AdminUnitsScreen(vm: AdminViewModel) {
 
     val residentes = usuarios.filter { it.fkRolUsuario == 1 || it.fkRolUsuario == null }
 
+    val unidadesOrdenadas = remember(unidades) {
+        unidades.sortedWith(compareBy({ it.torre }, { it.piso }, { it.numero }))
+    }
+
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -586,7 +729,23 @@ fun AdminUnitsScreen(vm: AdminViewModel) {
                 }
             }
 
-            items(unidades) { u ->
+            itemsIndexed(unidadesOrdenadas) { index, u ->
+                val bloque = u.torre
+                val bloqueAnterior = unidadesOrdenadas.getOrNull(index - 1)?.torre
+                if (bloque != null && bloque != bloqueAnterior) {
+                    Column {
+                        if (index > 0) Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Bloque $bloque",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = AdminPurple,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                        HorizontalDivider(color = AdminPurple.copy(alpha = 0.3f))
+                        Spacer(Modifier.height(4.dp))
+                    }
+                }
                 val residenteAsignado = usuarios.find { it.fkUnidad == u.id }
                 GuardianCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -779,7 +938,8 @@ fun AdminAccountScreen(vm: AdminViewModel) {
     val usuarios     by vm.usuarios.collectAsStateWithLifecycle()
     val cuotasUsuario by vm.cuotasUsuario.collectAsStateWithLifecycle()
     val morosos      by vm.morosos.collectAsStateWithLifecycle()
-    val clipboard    = LocalClipboardManager.current
+    val clipboard    = LocalClipboard.current
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
     val residentes = usuarios.filter { it.fkRolUsuario == 1 }
     var selectedUsuario by remember { mutableStateOf<Usuario?>(null) }
@@ -835,7 +995,7 @@ fun AdminAccountScreen(vm: AdminViewModel) {
                                     appendLine("${c.periodo}  ${c.estatus.uppercase().padEnd(12)} ${"%.2f".format(c.monto ?: 0.0)}${if (rec > 0) " + recargo ${"%.2f".format(rec)}" else ""}")
                                 }
                             }
-                            clipboard.setText(AnnotatedString(texto))
+                            coroutineScope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("cuenta", texto))) }
                         }) {
                             Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
@@ -975,7 +1135,7 @@ private fun CleaningTasksAdminDialog(
                                     }
                                     t.notas?.takeIf { it.isNotBlank() }?.let { n ->
                                         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Icon(Icons.Default.Notes, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Icon(Icons.AutoMirrored.Filled.Notes, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                             Text(n, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                     }

@@ -186,6 +186,24 @@ class AdminRepository {
         )
     }
 
+    suspend fun getAvisos(): Result<List<Aviso>> = runCatching {
+        client.postgrest["aviso"].select {
+            order("id", Order.DESCENDING)
+        }.decodeList()
+    }
+
+    suspend fun crearAviso(titulo: String, descripcion: String?, tono: String): Result<Unit> = runCatching {
+        client.postgrest["aviso"].insert(
+            Aviso(titulo = titulo, descripcion = descripcion?.takeIf { it.isNotBlank() }, tono = tono)
+        )
+    }
+
+    suspend fun eliminarAviso(avisoId: Int): Result<Unit> = runCatching {
+        client.postgrest["aviso"].delete {
+            filter { eq("id", avisoId) }
+        }
+    }
+
     suspend fun tieneCuotasPendientes(unidadId: Int): Result<Boolean> = runCatching {
         val residentes = client.postgrest["usuario"].select {
             filter { eq("fkunidad", unidadId) }

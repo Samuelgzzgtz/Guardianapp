@@ -144,26 +144,29 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
     }
 
     private var realtimeJob: Job? = null
+    private var realtimeChannel: io.github.jan.supabase.realtime.RealtimeChannel? = null
 
     fun startRealtime(userId: Int) {
         realtimeJob?.cancel()
         realtimeJob = viewModelScope.launch {
-            val client  = SupabaseClientProvider.client
-            val channel = client.channel("resident-live-$userId")
-            val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                table = "reserva"
-            }
+            val channel = SupabaseClientProvider.client.channel("resident-live-$userId")
+            realtimeChannel = channel
+            val reservaChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "reserva" }
+            val avisoChanges   = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "aviso" }
+            val reporteChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "reporte" }
             channel.subscribe()
-            changes.collect {
-                repo.getReservas(userId).onSuccess { _reservas.value = it }
-                repo.getAvisos().onSuccess { _avisos.value = it }
-            }
+            launch { reservaChanges.collect { repo.getReservas(userId).onSuccess { _reservas.value = it } } }
+            launch { avisoChanges.collect   { repo.getAvisos().onSuccess          { _avisos.value   = it } } }
+            launch { reporteChanges.collect { repo.getReportes(userId).onSuccess  { _reportes.value = it } } }
         }
     }
 
     override fun onCleared() {
         super.onCleared()
         realtimeJob?.cancel()
+        viewModelScope.launch {
+            realtimeChannel?.let { runCatching { it.unsubscribe() } }
+        }
     }
 
     fun solicitarLimpieza(userId: Int, notas: String) {
