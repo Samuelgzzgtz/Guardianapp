@@ -409,7 +409,7 @@ private fun PaseValidoDialog(
                 Text("Visitante: ${pase.nombreVisitante}", style = MaterialTheme.typography.bodyMedium)
                 pase.modeloVehiculo?.let { Text("Vehículo: $it ${pase.colorVehiculo ?: ""}", style = MaterialTheme.typography.bodySmall) }
                 pase.placaVehiculo?.let { Text("Placa: ${pase.placaVehiculo}", style = MaterialTheme.typography.bodySmall) }
-                Text("Usos restantes: ${pase.usosMaximos - pase.usosRealizados - 1}", style = MaterialTheme.typography.bodySmall)
+                Text("Usos restantes: ${pase.usosMaximos - pase.usosRealizados}", style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {

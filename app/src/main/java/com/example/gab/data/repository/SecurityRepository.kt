@@ -131,6 +131,7 @@ class SecurityRepository {
     }
 
     suspend fun registrarAccesoPase(pase: PaseVisita): Result<Unit> = runCatching {
+        // TODO: replace client-side increment with SQL usos_realizados = usos_realizados + 1 to prevent race condition on concurrent scans
         val nuevosUsos = (pase.usosRealizados) + 1
         val agotar     = nuevosUsos >= pase.usosMaximos
         client.postgrest["pase_visita"]

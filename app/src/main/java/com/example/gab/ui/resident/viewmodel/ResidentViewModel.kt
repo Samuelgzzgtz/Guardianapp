@@ -72,6 +72,7 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
             repo.getHistorialCuotas(userId).onSuccess { _historialCuotas.value = it }
             repo.getUsuarioUnidad(userId).onSuccess   { _unidad.value         = it }
             repo.getVehiculos(userId).onSuccess       { _vehiculos.value      = it }
+            repo.getPases(userId).onSuccess           { _pases.value          = it }
             _isLoading.value = false
         }
         startRealtime(userId)
