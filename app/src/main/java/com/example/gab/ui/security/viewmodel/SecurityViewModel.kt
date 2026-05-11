@@ -11,8 +11,14 @@ import io.github.jan.supabase.realtime.postgresChangeFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+
+sealed class QrScanResult {
+    data class Error(val mensaje: String) : QrScanResult()
+    data class PaseValido(val pase: PaseVisita) : QrScanResult()
+}
 
 class SecurityViewModel : ViewModel() {
 
@@ -62,6 +68,9 @@ class SecurityViewModel : ViewModel() {
 
     private val _toastMessage      = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
+
+    private val _qrScanResult      = MutableStateFlow<QrScanResult?>(null)
+    val qrScanResult: StateFlow<QrScanResult?> = _qrScanResult.asStateFlow()
 
     private var realtimeJob: Job? = null
     private val PLACA_REGEX = Regex("[A-Z]{2,3}[-\\s]?\\d{2,4}[-\\s]?[A-Z0-9]{0,3}")
@@ -123,13 +132,27 @@ class SecurityViewModel : ViewModel() {
     }
 
     // ── QR ──────────────────────────────────────────────────────────────────
-    fun onQrScanned(rawUid: String, guardiaId: Int) {
-        viewModelScope.launch {
-            val uid = rawUid.trim().toIntOrNull() ?: run {
-                _toastMessage.value = "QR inválido"
-                return@launch
+    fun onQrScanned(qrContent: String, guardiaId: Int) {
+        if (qrContent.startsWith("pase:")) {
+            val paseId = qrContent.removePrefix("pase:").toIntOrNull()
+            if (paseId == null) {
+                _qrScanResult.value = QrScanResult.Error("QR inválido")
+                return
             }
-            repo.getResidentePorId(uid)
+            resolverPaseQr(paseId)
+        } else {
+            val userId = qrContent.trim().toIntOrNull()
+            if (userId == null) {
+                _toastMessage.value = "QR no reconocido"
+                return
+            }
+            handleResidentQr(userId)
+        }
+    }
+
+    private fun handleResidentQr(userId: Int) {
+        viewModelScope.launch {
+            repo.getResidentePorId(userId)
                 .onSuccess { residente ->
                     if (residente == null) _toastMessage.value = "Residente no encontrado"
                     else _residenteEscaneado.value = residente
@@ -137,6 +160,36 @@ class SecurityViewModel : ViewModel() {
                 .onFailure { _toastMessage.value = "Error al leer QR: ${it.message}" }
         }
     }
+
+    private fun resolverPaseQr(paseId: Int) {
+        viewModelScope.launch {
+            repo.getPaseById(paseId)
+                .onSuccess { pase ->
+                    when {
+                        !pase.activo -> _qrScanResult.value = QrScanResult.Error("Este pase ya no está activo")
+                        pase.fechaExpiracion != null && LocalDate.now().isAfter(
+                            LocalDate.parse(pase.fechaExpiracion)
+                        ) -> _qrScanResult.value = QrScanResult.Error("Pase expirado")
+                        else -> _qrScanResult.value = QrScanResult.PaseValido(pase)
+                    }
+                }
+                .onFailure { _qrScanResult.value = QrScanResult.Error("Pase no encontrado") }
+        }
+    }
+
+    fun confirmarAccesoPase(pase: PaseVisita) {
+        viewModelScope.launch {
+            repo.registrarAccesoPase(pase)
+                .onSuccess {
+                    repo.notificarLlegadaVisitante(pase.fkResidente!!, pase.nombreVisitante)
+                    _toastMessage.value = "Acceso registrado para ${pase.nombreVisitante}"
+                    _qrScanResult.value = null
+                }
+                .onFailure { _toastMessage.value = "Error al registrar acceso: ${it.message}" }
+        }
+    }
+
+    fun clearQrScanResult() { _qrScanResult.value = null }
 
     fun registrarAccesoQr(guardiaId: Int, residente: Usuario, direccion: String) {
         val hora = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
