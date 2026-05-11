@@ -166,3 +166,15 @@ fun QuickActionButton(
         }
     }
 }
+
+@Composable
+fun EmptyState(message: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+    }
+}
