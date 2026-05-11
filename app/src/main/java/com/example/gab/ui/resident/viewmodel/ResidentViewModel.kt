@@ -52,6 +52,9 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
     private val _vehiculos = MutableStateFlow<List<Vehiculo>>(emptyList())
     val vehiculos: StateFlow<List<Vehiculo>> = _vehiculos.asStateFlow()
 
+    private val _pases = MutableStateFlow<List<PaseVisita>>(emptyList())
+    val pases: StateFlow<List<PaseVisita>> = _pases.asStateFlow()
+
     private val _isLoading  = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -215,6 +218,43 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
                     _vehiculos.value = _vehiculos.value.filter { it.id != vehiculoId }
                 }
                 .onFailure { _toastMessage.value = "Error al eliminar: ${it.message}" }
+        }
+    }
+
+    fun loadPases(userId: Int) {
+        viewModelScope.launch {
+            repo.getPases(userId).onSuccess { _pases.value = it }
+        }
+    }
+
+    fun crearPase(
+        userId: Int,
+        nombreVisitante: String,
+        modeloVehiculo: String?,
+        colorVehiculo: String?,
+        placaVehiculo: String?,
+        vigencia: String,
+        usosMaximos: Int,
+        fechaExpiracion: String?
+    ) {
+        viewModelScope.launch {
+            repo.crearPase(userId, nombreVisitante, modeloVehiculo, colorVehiculo, placaVehiculo, vigencia, usosMaximos, fechaExpiracion)
+                .onSuccess {
+                    _toastMessage.value = "Pase creado"
+                    repo.getPases(userId).onSuccess { _pases.value = it }
+                }
+                .onFailure { _toastMessage.value = "Error al crear pase: ${it.message}" }
+        }
+    }
+
+    fun desactivarPase(userId: Int, paseId: Int) {
+        viewModelScope.launch {
+            repo.desactivarPase(paseId)
+                .onSuccess {
+                    _toastMessage.value = "Pase desactivado"
+                    repo.getPases(userId).onSuccess { _pases.value = it }
+                }
+                .onFailure { _toastMessage.value = "Error al desactivar pase: ${it.message}" }
         }
     }
 
