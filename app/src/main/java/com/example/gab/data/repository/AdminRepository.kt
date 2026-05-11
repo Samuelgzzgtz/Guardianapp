@@ -146,6 +146,7 @@ class AdminRepository {
             restDelete("tarealimpieza?fkasignado=eq.$userId")
             restDelete("accesolog?fkresidente=eq.$userId")
             restDelete("accesolog?fkguardia=eq.$userId")
+            restDelete("pase_visita?fk_residente=eq.$userId")
 
             // 3. Eliminar de tabla usuario
             restDelete("usuario?id=eq.$userId")
