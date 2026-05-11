@@ -32,6 +32,7 @@ import com.example.gab.data.model.Usuario
 import com.example.gab.ui.common.*
 import com.example.gab.ui.navigation.AppUser
 import com.example.gab.ui.navigation.Routes
+import com.example.gab.ui.security.viewmodel.QrScanResult
 import com.example.gab.ui.security.viewmodel.SecurityViewModel
 import com.example.gab.ui.theme.*
 import com.google.zxing.integration.android.IntentIntegrator
@@ -315,6 +316,7 @@ private fun RegisterAccessDialog(
 @Composable
 fun SecurityQrScreen(user: AppUser, vm: SecurityViewModel) {
     val residenteEscaneado by vm.residenteEscaneado.collectAsStateWithLifecycle()
+    val qrScanResult by vm.qrScanResult.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     val scanLauncher = rememberLauncherForActivityResult(
@@ -373,6 +375,76 @@ fun SecurityQrScreen(user: AppUser, vm: SecurityViewModel) {
             onConfirm = { direccion -> vm.registrarAccesoQr(user.id, residente, direccion) }
         )
     }
+
+    when (val result = qrScanResult) {
+        is QrScanResult.PaseValido -> PaseValidoDialog(
+            pase = result.pase,
+            onConfirmar = { vm.confirmarAccesoPase(result.pase) },
+            onDismiss   = { vm.clearQrScanResult() }
+        )
+        is QrScanResult.Error -> PaseErrorDialog(
+            mensaje   = result.mensaje,
+            onDismiss = { vm.clearQrScanResult() }
+        )
+        null -> Unit
+    }
+}
+
+@Composable
+private fun PaseValidoDialog(
+    pase: com.example.gab.data.model.PaseVisita,
+    onConfirmar: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.CheckCircle, null, tint = com.example.gab.ui.theme.StatusSuccess, modifier = Modifier.size(24.dp))
+                Text("Pase válido", color = com.example.gab.ui.theme.StatusSuccess)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Visitante: ${pase.nombreVisitante}", style = MaterialTheme.typography.bodyMedium)
+                pase.modeloVehiculo?.let { Text("Vehículo: $it ${pase.colorVehiculo ?: ""}", style = MaterialTheme.typography.bodySmall) }
+                pase.placaVehiculo?.let { Text("Placa: ${pase.placaVehiculo}", style = MaterialTheme.typography.bodySmall) }
+                Text("Usos restantes: ${pase.usosMaximos - pase.usosRealizados - 1}", style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirmar,
+                colors = ButtonDefaults.buttonColors(containerColor = com.example.gab.ui.theme.SecurityGreen)
+            ) { Text("Confirmar entrada") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+
+@Composable
+private fun PaseErrorDialog(
+    mensaje: String,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Warning, null, tint = com.example.gab.ui.theme.StatusDanger, modifier = Modifier.size(24.dp))
+                Text("Acceso denegado", color = com.example.gab.ui.theme.StatusDanger)
+            }
+        },
+        text = { Text(mensaje) },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = com.example.gab.ui.theme.StatusDanger)
+            ) { Text("Cerrar") }
+        }
+    )
 }
 
 @Composable
