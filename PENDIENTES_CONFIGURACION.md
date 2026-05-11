@@ -33,44 +33,60 @@
 
 ---
 
-## PASO 2 — Obtener FCM Server Key de Firebase
+## PASO 2 — Obtener Service Account de Firebase (FCM v1)
 
-**Dónde:** Firebase Console → Configuración del proyecto → Cloud Messaging
+**Dónde:** Firebase Console → Configuración del proyecto → Cuentas de servicio
 
-**Por qué:** Sin esta clave, la Edge Function `recordatorio-pago` no puede enviar notificaciones push.
+**Por qué:** Las Edge Functions `recordatorio-pago` y `send-push` usan la API FCM v1 (la heredada/Legacy está deshabilitada en el proyecto `guardianapp-a0b54`). FCM v1 requiere autenticarse con una cuenta de servicio en lugar de una Server Key.
 
 ### Instrucciones:
 
 1. Abre [https://console.firebase.google.com](https://console.firebase.google.com)
-2. Selecciona el proyecto de **GuardianApp**
+2. Selecciona el proyecto de **GuardianApp** (`guardianapp-a0b54`)
 3. Haz clic en el ícono de engrane ⚙️ → **Configuración del proyecto**
-4. Ve a la pestaña **Cloud Messaging**
-5. En la sección **API de Cloud Messaging de Firebase para Android**, copia el valor de:
-   - **Clave de servidor** (empieza con `AAAA...`)
-6. Guarda ese valor, lo necesitas en el Paso 3
+4. Ve a la pestaña **Cuentas de servicio** (Service accounts)
+5. Haz clic en **Generar nueva clave privada** → **Generar clave**
+6. Se descargará un archivo JSON. Ábrelo — tiene esta estructura:
 
-> **Nota:** Si ves "API de Cloud Messaging (heredada) deshabilitada", actívala haciendo clic en los 3 puntos ⋮ → Administrar API en Google Cloud Console → Habilitar.
+```json
+{
+  "type": "service_account",
+  "project_id": "guardianapp-a0b54",
+  "private_key_id": "...",
+  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-xxxxx@guardianapp-a0b54.iam.gserviceaccount.com",
+  ...
+}
+```
+
+7. Copia los valores de `project_id`, `client_email`, y `private_key` — los necesitas en el Paso 3.
+
+> **Seguridad:** Guarda este archivo JSON en lugar seguro. Nunca lo subas al repositorio ni lo compartas.
 
 ---
 
-## PASO 3 — Agregar FCM_SERVER_KEY como secreto en Supabase
+## PASO 3 — Agregar secrets de Firebase en Supabase
 
 **Dónde:** Supabase Dashboard → Edge Functions → Secrets
 
-**Por qué:** La Edge Function `recordatorio-pago` lee `FCM_SERVER_KEY` del entorno. Sin este secreto, las notificaciones push fallan silenciosamente.
+**Por qué:** Las Edge Functions `recordatorio-pago` y `send-push` leen estas 3 variables del entorno para autenticarse con FCM v1.
 
 ### Instrucciones:
 
 1. Abre el Dashboard de Supabase → proyecto GuardianApp
 2. En el menú izquierdo: **Edge Functions**
-3. Haz clic en **Manage secrets** (o **Secrets** en la barra superior)
-4. Agrega el siguiente secreto:
+3. Haz clic en **Manage secrets**
+4. Agrega los siguientes 3 secretos (con los valores del JSON del Paso 2):
 
 | Nombre | Valor |
 |--------|-------|
-| `FCM_SERVER_KEY` | *(la clave que copiaste en el Paso 2)* |
+| `FIREBASE_PROJECT_ID` | `guardianapp-a0b54` |
+| `FIREBASE_CLIENT_EMAIL` | *(el valor de `client_email` del JSON)* |
+| `FIREBASE_PRIVATE_KEY` | *(el valor completo de `private_key`, incluyendo los `-----BEGIN/END PRIVATE KEY-----`)* |
 
-5. Haz clic en **Save**
+5. Haz clic en **Save** después de cada uno.
+
+> **Nota sobre `FIREBASE_PRIVATE_KEY`:** El valor incluye saltos de línea como `\n`. Pégalo exactamente como aparece en el JSON (con los `\n` literales o con saltos de línea reales — Supabase lo maneja correctamente).
 
 ---
 
@@ -78,7 +94,7 @@
 
 **Dónde:** Terminal con Supabase CLI instalado
 
-**Por qué:** Las funciones `auth-confirm` y `recordatorio-pago` tienen cambios que deben subirse a Supabase.
+**Por qué:** Las funciones `auth-confirm`, `recordatorio-pago` y `send-push` tienen cambios que deben subirse a Supabase.
 
 ### Requisito previo — Instalar Supabase CLI (si no lo tienes):
 ```powershell
@@ -100,10 +116,10 @@ supabase login
 # Desplegar auth-confirm (página de confirmación de email):
 supabase functions deploy auth-confirm --project-ref spbrzuxvlljowwjawmkv
 
-# Desplegar recordatorio-pago (recordatorios de pago):
+# Desplegar recordatorio-pago (recordatorios de pago programados):
 supabase functions deploy recordatorio-pago --project-ref spbrzuxvlljowwjawmkv
 
-# Desplegar send-push (notificaciones individuales):
+# Desplegar send-push (notificaciones individuales por trigger de DB):
 supabase functions deploy send-push --project-ref spbrzuxvlljowwjawmkv
 ```
 
@@ -181,7 +197,7 @@ Puedes disparar un recordatorio en cualquier momento desde la app:
 4. Aparecerá un Toast: `"Recordatorios enviados: X usuarios"`
 
 Si el Toast dice `"Error al enviar recordatorios"`, revisa:
-- Que el `FCM_SERVER_KEY` esté guardado correctamente (Paso 3)
+- Que los 3 secrets de Firebase estén guardados correctamente (Paso 3)
 - Que la función esté desplegada (Paso 4)
 - Que los usuarios tengan FCM token registrado (la app lo registra automáticamente al iniciar sesión)
 
@@ -192,18 +208,20 @@ Si el Toast dice `"Error al enviar recordatorios"`, revisa:
 | # | Paso | Plataforma | Tiempo estimado |
 |---|------|-----------|-----------------|
 | 1 | Cambiar Site URL en Supabase Auth | Supabase Dashboard | 2 min |
-| 2 | Obtener FCM Server Key | Firebase Console | 3 min |
-| 3 | Agregar FCM_SERVER_KEY como secreto | Supabase Dashboard | 2 min |
+| 2 | Generar Service Account JSON en Firebase | Firebase Console | 3 min |
+| 3 | Agregar 3 secrets de Firebase en Supabase | Supabase Dashboard | 3 min |
 | 4 | Desplegar las 3 Edge Functions | Terminal (Supabase CLI) | 5 min |
 | 5 | Habilitar extensiones pg_cron y pg_net | Supabase Dashboard | 2 min |
 | 6 | Ejecutar SQL del cron job | Supabase SQL Editor | 3 min |
 | 7 | Probar desde la app | App Android | 2 min |
-| | **Total** | | **~19 min** |
+| | **Total** | | **~20 min** |
 
 ---
 
 ## Notas adicionales
 
+- **FCM v1 vs Legacy:** El proyecto Firebase `guardianapp-a0b54` tiene la API Legacy deshabilitada. Las Edge Functions usan FCM v1 con OAuth2 (Service Account JWT), que es la forma moderna y recomendada por Google.
 - **El cron usa hora UTC.** Si quieres que los recordatorios lleguen a las 9:00 AM hora de México (UTC-6), usa `'0 15 */7 * *'` en el SQL del cron.
 - **FCM tokens:** Los usuarios deben haber abierto la app al menos una vez con la versión más reciente para tener su FCM token registrado. Sin token, el recordatorio se saltea ese usuario silenciosamente.
 - **La Service Role Key nunca va en el código.** Solo en los Secrets de Supabase y localmente en `Secrets.kt` (ya está en `.gitignore`).
+- **El archivo JSON de la Service Account tampoco va en el repositorio.** Guárdalo en local o en un gestor de secretos.
