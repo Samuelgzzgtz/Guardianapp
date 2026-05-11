@@ -33,6 +33,7 @@ object Routes {
     const val RESIDENT_REPORTS   = "resident_reports"
     const val RESIDENT_PROFILE   = "resident_profile"
     const val RESIDENT_AMENITIES = "resident_amenities"
+    const val PASSES             = "passes"
     // Security
     const val SECURITY_HOME      = "security_home"
     const val SECURITY_VISITORS  = "security_visitors"

@@ -52,6 +52,7 @@ fun ResidentShell(user: AppUser, onLogout: () -> Unit) {
         NavItem("Reportes",  Icons.AutoMirrored.Filled.Assignment, Routes.RESIDENT_REPORTS,
             badgeCount = reportes.count { it.estatus == "Pendiente" }.coerceAtMost(9)),
         NavItem("Reservas",  Icons.Default.EventAvailable,         Routes.RESIDENT_AMENITIES),
+        NavItem("Pases",     Icons.Default.QrCode,                 Routes.PASSES),
         NavItem("Cuenta",    Icons.Default.AccountBalance,         Routes.RESIDENT_ACCOUNT),
         NavItem("Perfil",    Icons.Default.Person,                 Routes.RESIDENT_PROFILE),
     )
@@ -70,6 +71,7 @@ fun ResidentShell(user: AppUser, onLogout: () -> Unit) {
             composable(Routes.RESIDENT_HOME)      { ResidentHomeScreen(user, navController, vm) }
             composable(Routes.RESIDENT_REPORTS)   { ResidentReportsScreen(user, navController, vm) }
             composable(Routes.RESIDENT_AMENITIES) { ResidentAmenitiesScreen(user, vm) }
+            composable(Routes.PASSES)             { ResidentPassesScreen(user = user, vm = vm) }
             composable(Routes.RESIDENT_ACCOUNT)   { ResidentAccountScreen(vm) }
             composable(Routes.RESIDENT_PROFILE)   { ResidentProfileScreen(user, vm, onLogout) }
         }
