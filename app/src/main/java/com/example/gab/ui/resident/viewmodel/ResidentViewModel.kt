@@ -201,6 +201,10 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun agregarVehiculo(userId: Int, placa: String, descripcion: String, color: String) {
+        if (_vehiculos.value.size >= 3) {
+            _toastMessage.value = "Límite de 3 vehículos por residente alcanzado"
+            return
+        }
         viewModelScope.launch {
             repo.agregarVehiculo(userId, placa, descripcion, color)
                 .onSuccess {

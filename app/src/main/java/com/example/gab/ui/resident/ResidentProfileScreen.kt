@@ -177,9 +177,12 @@ private fun VehicleManagementCard(
     GuardianCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Mis Vehículos", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            TextButton(onClick = { showAddDialog = true }) {
+            TextButton(
+                onClick  = { if (vehiculos.size < 3) showAddDialog = true },
+                enabled  = vehiculos.size < 3
+            ) {
                 Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                Text("Agregar")
+                Text(if (vehiculos.size < 3) "Agregar (${vehiculos.size}/3)" else "Límite alcanzado (3/3)")
             }
         }
 
