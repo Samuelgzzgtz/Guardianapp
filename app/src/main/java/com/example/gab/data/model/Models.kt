@@ -20,7 +20,12 @@ data class Unidad(
 ) {
     fun displayUbicacion(): String = buildString {
         torre?.let { append("Bloque $it · ") }
-        append("Piso $piso · Depto $numero")
+        val tipoLabel = if (tipo.lowercase().contains("casa")) "Casa" else "Depto"
+        val numLimpio = numero
+            .replace(Regex("(?i)^(depto|departamento|casa)\\s*#?\\s*"), "")
+            .replace("#", "")
+            .trim()
+        append("Piso $piso · $tipoLabel $numLimpio")
     }
 }
 

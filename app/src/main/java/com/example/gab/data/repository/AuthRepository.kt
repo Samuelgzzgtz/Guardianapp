@@ -142,7 +142,8 @@ class AuthRepository(private val context: Context) {
                 conn.setRequestProperty("Prefer", "return=minimal")
                 conn.doOutput = true
                 val unidadPart = if (unidadId != null) "\"fkunidad\":$unidadId," else ""
-                val body = """{"nombre":"$safeNombre","email":"$safeEmail","fkrolusuario":$rolId,${unidadPart}"estaactivo":true}"""
+                val authPart  = if (authUserId != null) "\"authuid\":\"$authUserId\"," else ""
+                val body = """{"nombre":"$safeNombre","email":"$safeEmail","fkrolusuario":$rolId,${unidadPart}${authPart}"estaactivo":true}"""
                 conn.outputStream.use { it.write(body.toByteArray()) }
                 val code = conn.responseCode
                 if (code !in 200..299) {

@@ -116,10 +116,18 @@ class AdminRepository {
         val baseUrl    = SupabaseClientProvider.SUPABASE_URL
 
         withContext(Dispatchers.IO) {
-            // 1. Buscar UUID del auth user por email para poder eliminarlo después
+            // 1. Leer authuid almacenado en usuario (guardado al crear). Fallback: buscar por email.
             val authUid = runCatching {
+                val conn = URL("$baseUrl/rest/v1/usuario?id=eq.$userId&select=authuid").openConnection() as HttpURLConnection
+                conn.setRequestProperty("apikey", serviceKey)
+                conn.setRequestProperty("Authorization", "Bearer $serviceKey")
+                val body = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+                Regex(""""authuid"\s*:\s*"([0-9a-f-]{36})"""").find(body)?.groupValues?.get(1)
+            }.getOrNull() ?: runCatching {
+                // Fallback para usuarios creados antes de guardar authuid
                 val encoded = java.net.URLEncoder.encode(email.trim(), "UTF-8")
-                val conn = URL("$baseUrl/auth/v1/admin/users?email=$encoded").openConnection() as HttpURLConnection
+                val conn = URL("$baseUrl/auth/v1/admin/users?email=$encoded&per_page=1").openConnection() as HttpURLConnection
                 conn.setRequestProperty("apikey", serviceKey)
                 conn.setRequestProperty("Authorization", "Bearer $serviceKey")
                 val body = conn.inputStream.bufferedReader().readText()
