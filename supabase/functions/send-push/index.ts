@@ -94,8 +94,10 @@ async function sendFcmNotification(
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 serve(async (req) => {
-  const { record } = await req.json();
-  const destinatarioId: number = record.fkusuario;
+  const payload = await req.json();
+  // Support both Supabase Database Webhook (has `record`) and direct HTTP POST
+  const record = payload.record ?? payload;
+  const destinatarioId: number = record.fkusuario ?? record.userId;
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
   const { data: user } = await supabase
@@ -120,7 +122,7 @@ serve(async (req) => {
       accessToken,
       user.fcmtoken,
       record.titulo  ?? "GuardianApp",
-      record.mensaje ?? "",
+      record.cuerpo ?? record.mensaje ?? record.body ?? "",
       { notificacion_id: String(record.id) }
     );
   } catch (e) {

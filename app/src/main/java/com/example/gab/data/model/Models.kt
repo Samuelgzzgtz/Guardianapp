@@ -161,6 +161,22 @@ data class Visita(
     @SerialName("timestamp") val timestamp: String? = null
 )
 
+@Serializable
+data class PaseVisita(
+    @SerialName("id")               val id: Int?             = null,
+    @SerialName("fk_residente")     val fkResidente: Int?    = null,
+    @SerialName("nombre_visitante") val nombreVisitante: String = "",
+    @SerialName("modelo_vehiculo")  val modeloVehiculo: String? = null,
+    @SerialName("color_vehiculo")   val colorVehiculo: String?  = null,
+    @SerialName("placa_vehiculo")   val placaVehiculo: String?  = null,
+    @SerialName("vigencia")         val vigencia: String     = "hoy",
+    @SerialName("usos_maximos")     val usosMaximos: Int     = 1,
+    @SerialName("usos_realizados")  val usosRealizados: Int  = 0,
+    @SerialName("fecha_creacion")   val fechaCreacion: String?  = null,
+    @SerialName("fecha_expiracion") val fechaExpiracion: String? = null,
+    @SerialName("activo")           val activo: Boolean      = true
+)
+
 data class UnidadConEstatus(val unidad: Unidad, val ocupada: Boolean)
 
 data class DashboardStats(
