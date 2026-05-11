@@ -198,4 +198,47 @@ class ResidentRepository(private val context: Context) {
     suspend fun eliminarVehiculo(vehiculoId: Int): Result<Unit> = runCatching {
         client.postgrest["vehiculo"].delete { filter { eq("id", vehiculoId) } }
     }
+
+    suspend fun getPases(userId: Int): Result<List<PaseVisita>> = runCatching {
+        client.postgrest["pase_visita"]
+            .select { filter { eq("fk_residente", userId) } }
+            .decodeList<PaseVisita>()
+    }
+
+    suspend fun crearPase(
+        userId: Int,
+        nombreVisitante: String,
+        modeloVehiculo: String?,
+        colorVehiculo: String?,
+        placaVehiculo: String?,
+        vigencia: String,
+        usosMaximos: Int,
+        fechaExpiracion: String?
+    ): Result<PaseVisita> = runCatching {
+        val nuevo = PaseVisita(
+            fkResidente     = userId,
+            nombreVisitante = nombreVisitante,
+            modeloVehiculo  = modeloVehiculo,
+            colorVehiculo   = colorVehiculo,
+            placaVehiculo   = placaVehiculo,
+            vigencia        = vigencia,
+            usosMaximos     = usosMaximos,
+            fechaExpiracion = fechaExpiracion
+        )
+        client.postgrest["pase_visita"]
+            .insert(nuevo) { select() }
+            .decodeSingle<PaseVisita>()
+    }
+
+    suspend fun desactivarPase(paseId: Int): Result<Unit> = runCatching {
+        client.postgrest["pase_visita"]
+            .update({ set("activo", false) }) {
+                filter { eq("id", paseId) }
+            }
+    }
+
+    suspend fun deletePase(paseId: Int): Result<Unit> = runCatching {
+        client.postgrest["pase_visita"]
+            .delete { filter { eq("id", paseId) } }
+    }
 }
