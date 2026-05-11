@@ -229,7 +229,7 @@ class AuthRepository(private val context: Context) {
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("Prefer", "return=minimal")
             conn.doOutput = true
-            conn.outputStream.use { it.write("""{"fcm_token":"$fcmToken"}""".toByteArray()) }
+            conn.outputStream.use { it.write("""{"fcmtoken":"$fcmToken"}""".toByteArray()) }
             conn.responseCode
             conn.disconnect()
         }
