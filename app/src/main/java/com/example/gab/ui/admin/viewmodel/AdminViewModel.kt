@@ -266,5 +266,15 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun dispararRecordatorioPago() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            repo.dispararRecordatorioPago()
+                .onSuccess { count -> _toastMessage.value = "Recordatorios enviados: $count usuarios" }
+                .onFailure { _toastMessage.value = "Error al enviar recordatorios: ${it.message}" }
+            _isLoading.value = false
+        }
+    }
+
     fun clearToast() { _toastMessage.value = null }
 }

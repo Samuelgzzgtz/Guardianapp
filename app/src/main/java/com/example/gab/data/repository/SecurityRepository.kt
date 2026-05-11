@@ -98,4 +98,29 @@ class SecurityRepository {
             filter { ilike("placa", placaNorm) }
         }.decodeList<Vehiculo>().firstOrNull()
     }
+
+    suspend fun registrarAccesoConId(
+        residenteId: Int,
+        guardiaId: Int,
+        direccion: String,
+        hora: String
+    ): Result<Int> = runCatching {
+        client.postgrest["accesolog"].insert(
+            AccesoLog(fkResidente = residenteId, fkGuardia = guardiaId, direccion = direccion, horaRegistro = hora)
+        )
+        client.postgrest["accesolog"].select {
+            filter {
+                eq("fkresidente", residenteId)
+                eq("fkguardia", guardiaId)
+            }
+            order("id", Order.DESCENDING)
+            limit(1)
+        }.decodeList<AccesoLog>().firstOrNull()?.id ?: 0
+    }
+
+    suspend fun cancelarAcceso(accesoId: Int): Result<Unit> = runCatching {
+        client.postgrest["accesolog"].delete {
+            filter { eq("id", accesoId) }
+        }
+    }
 }

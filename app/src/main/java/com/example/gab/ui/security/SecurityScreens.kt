@@ -526,11 +526,12 @@ fun SecurityIncidentsScreen(user: AppUser, vm: SecurityViewModel) {
 
 @Composable
 fun SecurityPlacasScreen(user: AppUser, vm: SecurityViewModel) {
-    val showCamera          by vm.showPlacaCamera.collectAsStateWithLifecycle()
-    val placaResult         by vm.placaResultado.collectAsStateWithLifecycle()
-    val residentes          by vm.residentes.collectAsStateWithLifecycle()
+    val showCamera            by vm.showPlacaCamera.collectAsStateWithLifecycle()
+    val placaResult           by vm.placaResultado.collectAsStateWithLifecycle()
+    val residentes            by vm.residentes.collectAsStateWithLifecycle()
     val residenteSeleccionado by vm.residenteParaPlaca.collectAsStateWithLifecycle()
-    val vehiculosResidente  by vm.vehiculosResidente.collectAsStateWithLifecycle()
+    val vehiculosResidente    by vm.vehiculosResidente.collectAsStateWithLifecycle()
+    val autoRegistrado        by vm.autoRegistrado.collectAsStateWithLifecycle()
 
     var busqueda by remember { mutableStateOf("") }
     var showResidenteDropdown by remember { mutableStateOf(false) }
@@ -549,6 +550,38 @@ fun SecurityPlacasScreen(user: AppUser, vm: SecurityViewModel) {
         verticalArrangement = Arrangement.spacedBy(14.dp),
         contentPadding = PaddingValues(vertical = 16.dp)
     ) {
+        // Auto-registration confirmation banner with undo
+        if (autoRegistrado) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = SecurityGreen.copy(alpha = 0.12f)),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.CheckCircle, null, tint = SecurityGreen, modifier = Modifier.size(20.dp))
+                        Text(
+                            "Acceso registrado automáticamente",
+                            modifier = Modifier.weight(1f),
+                            color = SecurityGreen,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        TextButton(
+                            onClick = { vm.cancelarUltimoAcceso() },
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Text("Anular", color = StatusDanger, style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             Text("Verificar Placas", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(4.dp))

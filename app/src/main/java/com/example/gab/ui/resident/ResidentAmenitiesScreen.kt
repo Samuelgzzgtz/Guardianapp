@@ -142,11 +142,23 @@ private fun NewReservaDialog(
 ) {
     var fecha by remember { mutableStateOf("") }
     var slot  by remember { mutableStateOf("08:00 - 10:00") }
+    var sinDisponibilidad by remember { mutableStateOf(false) }
     val today = java.time.LocalDate.now().toString()
     val allSlots = listOf(
         "08:00 - 10:00", "10:00 - 12:00", "12:00 - 14:00",
         "14:00 - 16:00", "16:00 - 18:00", "18:00 - 20:00"
     )
+
+    // When loaded slots change, auto-select first free slot to avoid silent disabled button
+    LaunchedEffect(slotsTomados) {
+        if (fecha.length < 10) return@LaunchedEffect
+        val primerLibre = allSlots.firstOrNull { it !in slotsTomados }
+        when {
+            primerLibre == null  -> sinDisponibilidad = true
+            slot in slotsTomados -> { slot = primerLibre; sinDisponibilidad = false }
+            else                 -> sinDisponibilidad = false
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -158,9 +170,11 @@ private fun NewReservaDialog(
                     onValueChange = {
                         if (it.length == 10 && it >= today) {
                             fecha = it
+                            sinDisponibilidad = false
                             onFechaChange(it)
                         } else if (it.length < 10) {
                             fecha = it
+                            sinDisponibilidad = false
                         }
                     },
                     label = { Text("Fecha (YYYY-MM-DD)") },
@@ -172,36 +186,44 @@ private fun NewReservaDialog(
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
                 if (fecha.length == 10) {
-                    Text("Selecciona horario:", style = MaterialTheme.typography.labelMedium)
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        allSlots.forEach { s ->
-                            val ocupado    = s in slotsTomados
-                            val isSelected = slot == s
-                            Surface(
-                                onClick = { if (!ocupado) slot = s },
-                                color = when {
-                                    ocupado    -> MaterialTheme.colorScheme.surfaceVariant
-                                    isSelected -> ResidentBlue.copy(alpha = 0.12f)
-                                    else       -> MaterialTheme.colorScheme.surface
-                                },
-                                shape  = MaterialTheme.shapes.small,
-                                border = if (isSelected) BorderStroke(1.dp, ResidentBlue) else null
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                    if (sinDisponibilidad) {
+                        Text(
+                            "Sin disponibilidad para esta fecha",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    } else {
+                        Text("Selecciona horario:", style = MaterialTheme.typography.labelMedium)
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            allSlots.forEach { s ->
+                                val ocupado    = s in slotsTomados
+                                val isSelected = slot == s
+                                Surface(
+                                    onClick = { if (!ocupado) slot = s },
+                                    color = when {
+                                        ocupado    -> MaterialTheme.colorScheme.surfaceVariant
+                                        isSelected -> ResidentBlue.copy(alpha = 0.12f)
+                                        else       -> MaterialTheme.colorScheme.surface
+                                    },
+                                    shape  = MaterialTheme.shapes.small,
+                                    border = if (isSelected) BorderStroke(1.dp, ResidentBlue) else null
                                 ) {
-                                    Text(
-                                        s,
-                                        modifier = Modifier.weight(1f),
-                                        color = if (ocupado) MaterialTheme.colorScheme.onSurfaceVariant
-                                                else MaterialTheme.colorScheme.onSurface,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                    if (ocupado) {
-                                        Text("Ocupado", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    } else if (isSelected) {
-                                        Icon(Icons.Default.CheckCircle, null, tint = ResidentBlue, modifier = Modifier.size(16.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            s,
+                                            modifier = Modifier.weight(1f),
+                                            color = if (ocupado) MaterialTheme.colorScheme.onSurfaceVariant
+                                                    else MaterialTheme.colorScheme.onSurface,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        if (ocupado) {
+                                            Text("Ocupado", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        } else if (isSelected) {
+                                            Icon(Icons.Default.CheckCircle, null, tint = ResidentBlue, modifier = Modifier.size(16.dp))
+                                        }
                                     }
                                 }
                             }
@@ -212,8 +234,8 @@ private fun NewReservaDialog(
         },
         confirmButton = {
             Button(
-                onClick  = { if (fecha.isNotBlank() && slot !in slotsTomados) onSubmit(fecha, slot) },
-                enabled  = fecha.length == 10 && fecha >= today && slot !in slotsTomados,
+                onClick  = { if (fecha.isNotBlank() && !sinDisponibilidad && slot !in slotsTomados) onSubmit(fecha, slot) },
+                enabled  = fecha.length == 10 && fecha >= today && !sinDisponibilidad && slot !in slotsTomados,
                 colors   = ButtonDefaults.buttonColors(containerColor = ResidentBlue)
             ) { Text("Confirmar") }
         },

@@ -218,4 +218,20 @@ class AdminRepository {
         }.decodeList<Cuota>()
         cuotas.isNotEmpty()
     }
+
+    suspend fun dispararRecordatorioPago(): Result<Int> = runCatching {
+        withContext(Dispatchers.IO) {
+            val serviceKey = SupabaseClientProvider.SUPABASE_SERVICE_KEY
+            val conn = URL("${SupabaseClientProvider.SUPABASE_URL}/functions/v1/recordatorio-pago")
+                .openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Authorization", "Bearer $serviceKey")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.outputStream.bufferedWriter().use { it.write("{}") }
+            val response = conn.inputStream.bufferedReader().readText()
+            conn.disconnect()
+            Regex(""""processed"\s*:\s*(\d+)""").find(response)?.groupValues?.get(1)?.toInt() ?: 0
+        }
+    }
 }

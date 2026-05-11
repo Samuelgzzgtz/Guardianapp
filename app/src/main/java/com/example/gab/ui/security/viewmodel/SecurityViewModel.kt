@@ -52,6 +52,11 @@ class SecurityViewModel : ViewModel() {
     private val _vehiculosResidente       = MutableStateFlow<List<Vehiculo>>(emptyList())
     val vehiculosResidente: StateFlow<List<Vehiculo>> = _vehiculosResidente.asStateFlow()
 
+    private val _autoRegistrado    = MutableStateFlow(false)
+    val autoRegistrado: StateFlow<Boolean> = _autoRegistrado.asStateFlow()
+
+    private val _ultimoAccesoId    = MutableStateFlow(0)
+
     private val _isLoading         = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -201,12 +206,7 @@ class SecurityViewModel : ViewModel() {
                 _toastMessage.value = "No se detectó placa. Intenta con mejor iluminación."
                 return@launch
             }
-            val placaNormalizada = placaEncontrada
-                .trim()
-                .replace(" ", "")
-                .replace("-", "")
-                .uppercase()
-            // If a resident is pre-selected, verify the plate against their registered vehicles
+            val placaNormalizada = placaEncontrada.trim().replace(" ", "").replace("-", "").uppercase()
             val residente = _residenteParaPlaca.value
             val vehiculoCorrecto = if (residente != null) {
                 _vehiculosResidente.value.firstOrNull { v ->
@@ -216,12 +216,44 @@ class SecurityViewModel : ViewModel() {
                 repo.getVehiculoPorPlaca(placaNormalizada).getOrNull()
             }
             _placaResultado.value = Pair(placaNormalizada, vehiculoCorrecto)
+
             if (vehiculoCorrecto != null) {
-                repo.guardarVisita("Vehículo ${vehiculoCorrecto.placa} (${vehiculoCorrecto.descripcion ?: ""})", guardiaId, "PLACA")
-                    .onSuccess { repo.getVisitas().onSuccess { _visitas.value = it } }
+                repo.guardarVisita(
+                    "Vehículo ${vehiculoCorrecto.placa} (${vehiculoCorrecto.descripcion ?: ""})",
+                    guardiaId, "PLACA"
+                ).onSuccess { repo.getVisitas().onSuccess { _visitas.value = it } }
+
+                // Auto-register building access when resident was pre-selected and plate matches
+                if (residente != null) {
+                    val hora = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+                    repo.registrarAccesoConId(residente.id, guardiaId, "ENTRADA", hora)
+                        .onSuccess { accesoId ->
+                            _ultimoAccesoId.value = accesoId
+                            _autoRegistrado.value = true
+                            repo.getAccesoLog().onSuccess { _accesoLog.value = it }
+                        }
+                        .onFailure { _toastMessage.value = "Error al registrar acceso: ${it.message}" }
+                }
             }
         }
     }
+
+    fun cancelarUltimoAcceso() {
+        val accesoId = _ultimoAccesoId.value
+        if (accesoId == 0) return
+        viewModelScope.launch {
+            repo.cancelarAcceso(accesoId)
+                .onSuccess {
+                    _autoRegistrado.value = false
+                    _ultimoAccesoId.value = 0
+                    _toastMessage.value = "Acceso anulado"
+                    repo.getAccesoLog().onSuccess { _accesoLog.value = it }
+                }
+                .onFailure { _toastMessage.value = "Error al anular: ${it.message}" }
+        }
+    }
+
+    fun clearAutoRegistrado() { _autoRegistrado.value = false }
 
     override fun onCleared() {
         super.onCleared()

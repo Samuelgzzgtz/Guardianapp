@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.*
@@ -75,7 +77,22 @@ fun AdminShell(user: AppUser, onLogout: () -> Unit) {
         navItems = navItems,
         topBarTitle = "Administración",
         topBarActions = {
-            IconButton(onClick = onLogout) { Icon(Icons.AutoMirrored.Filled.ExitToApp, null) }
+            var showMenu by remember { mutableStateOf(false) }
+            IconButton(onClick = { showMenu = true }) {
+                Icon(Icons.Default.MoreVert, contentDescription = "Más opciones")
+            }
+            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                DropdownMenuItem(
+                    text = { Text("Enviar recordatorios de pago") },
+                    leadingIcon = { Icon(Icons.Default.Notifications, null) },
+                    onClick = { vm.dispararRecordatorioPago(); showMenu = false }
+                )
+                DropdownMenuItem(
+                    text = { Text("Cerrar sesión") },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, null) },
+                    onClick = { onLogout(); showMenu = false }
+                )
+            }
         }
     ) {
         NavHost(navController = navController, startDestination = Routes.ADMIN_DASHBOARD) {
@@ -1071,9 +1088,16 @@ private fun CleaningTasksAdminDialog(
     val prioridades  = listOf("baja", "normal", "alta")
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(max = 560.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.CleaningServices, null, tint = CleaningOrange, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
@@ -1097,19 +1121,15 @@ private fun CleaningTasksAdminDialog(
                     }
                 }
 
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 260.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
+                // Plain Column replaces LazyColumn — avoids nested-scroll conflict with outer verticalScroll
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (tareas.isEmpty()) {
-                        item {
-                            Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
-                                Text("Sin tareas asignadas hoy", color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodySmall)
-                            }
+                        Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                            Text("Sin tareas asignadas hoy", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall)
                         }
                     } else {
-                        items(tareas, key = { it.id ?: it.titulo }) { t ->
+                        tareas.forEach { t ->
                             val statusColor = when (t.estatus) {
                                 "completada" -> StatusSuccess
                                 "en_proceso" -> StatusInfo
