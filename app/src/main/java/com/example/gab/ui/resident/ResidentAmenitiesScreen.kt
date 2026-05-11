@@ -28,6 +28,16 @@ fun ResidentAmenitiesScreen(user: AppUser, vm: ResidentViewModel) {
     val conteoPorSlot by vm.conteoPorSlot.collectAsStateWithLifecycle()
     val loadingSlots  by vm.loadingSlots.collectAsStateWithLifecycle()
     val isLoading     by vm.isLoading.collectAsStateWithLifecycle()
+    val cuota         by vm.cuota.collectAsStateWithLifecycle()
+
+    val esMoroso = remember(cuota) {
+        val c = cuota ?: return@remember false
+        if (c.estatus == "pagado") return@remember false
+        val fechaStr = c.fechaVencimiento ?: return@remember false
+        val vencimiento = runCatching { java.time.LocalDate.parse(fechaStr) }.getOrNull()
+            ?: return@remember false
+        java.time.LocalDate.now().isAfter(vencimiento.plusDays(7))
+    }
 
     var selectedAmenidad by remember { mutableStateOf<Amenidad?>(null) }
     var reservaToCancel  by remember { mutableStateOf<Int?>(null) }
@@ -42,6 +52,36 @@ fun ResidentAmenitiesScreen(user: AppUser, vm: ResidentViewModel) {
             if (isLoading) {
                 Spacer(Modifier.height(8.dp))
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+
+        if (esMoroso) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = StatusDanger.copy(alpha = 0.10f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Default.Warning, null, tint = StatusDanger, modifier = Modifier.size(24.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Cuota vencida",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = StatusDanger
+                            )
+                            Text(
+                                "Tu pago lleva más de 7 días vencido. Realiza el pago para desbloquear las reservaciones.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = StatusDanger
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -66,9 +106,13 @@ fun ResidentAmenitiesScreen(user: AppUser, vm: ResidentViewModel) {
                         Text("Capacidad: ${amenidad.capacidad} personas", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Button(
-                        onClick = { selectedAmenidad = amenidad },
-                        colors = ButtonDefaults.buttonColors(containerColor = ResidentBlue)
-                    ) { Text("Reservar") }
+                        onClick  = { if (!esMoroso) selectedAmenidad = amenidad },
+                        enabled  = !esMoroso,
+                        colors   = ButtonDefaults.buttonColors(
+                            containerColor = if (esMoroso) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                                             else ResidentBlue
+                        )
+                    ) { Text(if (esMoroso) "Bloqueado" else "Reservar") }
                 }
             }
         }
