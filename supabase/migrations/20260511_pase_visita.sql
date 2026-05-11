@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS pase_visita (
 -- Residents may manage their own passes; security (role 2) may read and update any pass
 ALTER TABLE pase_visita ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "residents_manage_own_pases" ON pase_visita;
 CREATE POLICY "residents_manage_own_pases"
   ON pase_visita
   FOR ALL
@@ -24,8 +25,14 @@ CREATE POLICY "residents_manage_own_pases"
     fk_residente = (
       SELECT id FROM usuario WHERE email = auth.jwt() ->> 'email' LIMIT 1
     )
+  )
+  WITH CHECK (
+    fk_residente = (
+      SELECT id FROM usuario WHERE email = auth.jwt() ->> 'email' LIMIT 1
+    )
   );
 
+DROP POLICY IF EXISTS "security_read_pases" ON pase_visita;
 CREATE POLICY "security_read_pases"
   ON pase_visita
   FOR SELECT
@@ -37,6 +44,7 @@ CREATE POLICY "security_read_pases"
     )
   );
 
+DROP POLICY IF EXISTS "security_update_pases" ON pase_visita;
 CREATE POLICY "security_update_pases"
   ON pase_visita
   FOR UPDATE
