@@ -22,11 +22,12 @@ import com.example.gab.ui.theme.*
 
 @Composable
 fun ResidentAmenitiesScreen(user: AppUser, vm: ResidentViewModel) {
-    val amenidades   by vm.amenidades.collectAsStateWithLifecycle()
-    val reservas     by vm.reservas.collectAsStateWithLifecycle()
-    val slotsTomados by vm.slotsTomados.collectAsStateWithLifecycle()
-    val loadingSlots by vm.loadingSlots.collectAsStateWithLifecycle()
-    val isLoading    by vm.isLoading.collectAsStateWithLifecycle()
+    val amenidades    by vm.amenidades.collectAsStateWithLifecycle()
+    val reservas      by vm.reservas.collectAsStateWithLifecycle()
+    val slotsTomados  by vm.slotsTomados.collectAsStateWithLifecycle()
+    val conteoPorSlot by vm.conteoPorSlot.collectAsStateWithLifecycle()
+    val loadingSlots  by vm.loadingSlots.collectAsStateWithLifecycle()
+    val isLoading     by vm.isLoading.collectAsStateWithLifecycle()
 
     var selectedAmenidad by remember { mutableStateOf<Amenidad?>(null) }
     var reservaToCancel  by remember { mutableStateOf<Int?>(null) }
@@ -102,13 +103,14 @@ fun ResidentAmenitiesScreen(user: AppUser, vm: ResidentViewModel) {
 
     selectedAmenidad?.let { amenidad ->
         NewReservaDialog(
-            amenidad     = amenidad,
-            slotsTomados = slotsTomados,
-            loadingSlots = loadingSlots,
-            onFechaChange = { fecha -> vm.cargarSlotsTomados(amenidad.id, fecha) },
-            onDismiss = { selectedAmenidad = null; vm.limpiarSlotsTomados() },
-            onSubmit = { fecha, slot ->
-                vm.crearReserva(user.id, amenidad.id, fecha, slot)
+            amenidad      = amenidad,
+            slotsTomados  = slotsTomados,
+            conteoPorSlot = conteoPorSlot,
+            loadingSlots  = loadingSlots,
+            onFechaChange = { fecha -> vm.cargarSlotsTomados(amenidad, fecha) },
+            onDismiss     = { selectedAmenidad = null; vm.limpiarSlotsTomados() },
+            onSubmit      = { fecha, slot ->
+                vm.crearReserva(user.id, amenidad, fecha, slot)
                 selectedAmenidad = null
                 vm.limpiarSlotsTomados()
             }
@@ -135,6 +137,7 @@ fun ResidentAmenitiesScreen(user: AppUser, vm: ResidentViewModel) {
 private fun NewReservaDialog(
     amenidad: Amenidad,
     slotsTomados: List<String>,
+    conteoPorSlot: Map<String, Int>,
     loadingSlots: Boolean,
     onFechaChange: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -196,12 +199,14 @@ private fun NewReservaDialog(
                         Text("Selecciona horario:", style = MaterialTheme.typography.labelMedium)
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             allSlots.forEach { s ->
-                                val ocupado    = s in slotsTomados
+                                val lleno      = s in slotsTomados
                                 val isSelected = slot == s
+                                val conteo     = conteoPorSlot[s] ?: 0
+                                val cuposLibres = (amenidad.capacidad - conteo).coerceAtLeast(0)
                                 Surface(
-                                    onClick = { if (!ocupado) slot = s },
+                                    onClick = { if (!lleno) slot = s },
                                     color = when {
-                                        ocupado    -> MaterialTheme.colorScheme.surfaceVariant
+                                        lleno      -> MaterialTheme.colorScheme.surfaceVariant
                                         isSelected -> ResidentBlue.copy(alpha = 0.12f)
                                         else       -> MaterialTheme.colorScheme.surface
                                     },
@@ -215,14 +220,25 @@ private fun NewReservaDialog(
                                         Text(
                                             s,
                                             modifier = Modifier.weight(1f),
-                                            color = if (ocupado) MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = if (lleno) MaterialTheme.colorScheme.onSurfaceVariant
                                                     else MaterialTheme.colorScheme.onSurface,
                                             style = MaterialTheme.typography.bodyMedium
                                         )
-                                        if (ocupado) {
-                                            Text("Ocupado", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        } else if (isSelected) {
-                                            Icon(Icons.Default.CheckCircle, null, tint = ResidentBlue, modifier = Modifier.size(16.dp))
+                                        when {
+                                            lleno -> Text(
+                                                if (amenidad.permiteConcurrencia) "Lleno" else "Ocupado",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            amenidad.permiteConcurrencia -> Text(
+                                                "$cuposLibres/${amenidad.capacidad} cupos",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = SecurityGreen
+                                            )
+                                            isSelected -> Icon(
+                                                Icons.Default.CheckCircle, null,
+                                                tint = ResidentBlue, modifier = Modifier.size(16.dp)
+                                            )
                                         }
                                     }
                                 }

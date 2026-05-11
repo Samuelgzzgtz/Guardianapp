@@ -83,7 +83,8 @@ data class Amenidad(
     @SerialName("id") val id: Int = 0,
     @SerialName("nombre") val nombre: String = "",
     @SerialName("horario") val horario: String? = null,
-    @SerialName("capacidad") val capacidad: Int = 10
+    @SerialName("capacidad") val capacidad: Int = 10,
+    @SerialName("permite_concurrencia") val permiteConcurrencia: Boolean = false
 )
 
 @Serializable
@@ -91,8 +92,8 @@ data class Reserva(
     @SerialName("id") val id: Int? = null,
     @SerialName("fkusuario") val fkUsuario: Int? = null,
     @SerialName("fkamenidad") val fkAmenidad: Int? = null,
-    @SerialName("fecha") val fecha: String? = null,
-    @SerialName("slot") val slot: String? = null,
+    @SerialName("fechareservacion") val fecha: String? = null,
+    @SerialName("horarioslot") val slot: String? = null,
     @SerialName("estatus") val estatus: String = "activa"
 )
 

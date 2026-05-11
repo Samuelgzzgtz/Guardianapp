@@ -43,6 +43,9 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
     private val _slotsTomados = MutableStateFlow<List<String>>(emptyList())
     val slotsTomados: StateFlow<List<String>> = _slotsTomados.asStateFlow()
 
+    private val _conteoPorSlot = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val conteoPorSlot: StateFlow<Map<String, Int>> = _conteoPorSlot.asStateFlow()
+
     private val _loadingSlots = MutableStateFlow(false)
     val loadingSlots: StateFlow<Boolean> = _loadingSlots.asStateFlow()
 
@@ -109,21 +112,27 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun cargarSlotsTomados(amenidadId: Int, fecha: String) {
+    fun cargarSlotsTomados(amenidad: Amenidad, fecha: String) {
         viewModelScope.launch {
             _loadingSlots.value = true
-            repo.getSlotsTomados(amenidadId, fecha)
+            repo.getSlotsTomados(amenidad.id, fecha, amenidad.capacidad, amenidad.permiteConcurrencia)
                 .onSuccess { _slotsTomados.value = it }
                 .onFailure { _slotsTomados.value = emptyList() }
+            repo.getConteoPorSlot(amenidad.id, fecha)
+                .onSuccess { _conteoPorSlot.value = it }
+                .onFailure { _conteoPorSlot.value = emptyMap() }
             _loadingSlots.value = false
         }
     }
 
-    fun limpiarSlotsTomados() { _slotsTomados.value = emptyList() }
+    fun limpiarSlotsTomados() {
+        _slotsTomados.value = emptyList()
+        _conteoPorSlot.value = emptyMap()
+    }
 
-    fun crearReserva(userId: Int, amenidadId: Int, fecha: String, slot: String) {
+    fun crearReserva(userId: Int, amenidad: Amenidad, fecha: String, slot: String) {
         viewModelScope.launch {
-            repo.crearReservaConValidacion(userId, amenidadId, fecha, slot)
+            repo.crearReservaConValidacion(userId, amenidad.id, fecha, slot, amenidad.capacidad, amenidad.permiteConcurrencia)
                 .onSuccess {
                     _toastMessage.value = "Reserva creada exitosamente"
                     repo.getReservas(userId).onSuccess { _reservas.value = it }

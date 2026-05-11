@@ -95,28 +95,47 @@ class ResidentRepository(private val context: Context) {
         }
     }
 
-    suspend fun getSlotsTomados(amenidadId: Int, fecha: String): Result<List<String>> = runCatching {
-        client.postgrest["reserva"].select {
+    suspend fun getSlotsTomados(
+        amenidadId: Int, fecha: String, capacidad: Int, permiteConcurrencia: Boolean
+    ): Result<List<String>> = runCatching {
+        val reservas = client.postgrest["reserva"].select {
             filter {
                 eq("fkamenidad", amenidadId)
-                eq("fecha", fecha)
+                eq("fechareservacion", fecha)
                 eq("estatus", "activa")
             }
-        }.decodeList<Reserva>().mapNotNull { it.slot }
+        }.decodeList<Reserva>()
+        val limite = if (permiteConcurrencia) capacidad else 1
+        reservas.groupBy { it.slot ?: "" }
+            .filter { (_, list) -> list.size >= limite }
+            .keys.toList()
+    }
+
+    suspend fun getConteoPorSlot(amenidadId: Int, fecha: String): Result<Map<String, Int>> = runCatching {
+        val reservas = client.postgrest["reserva"].select {
+            filter {
+                eq("fkamenidad", amenidadId)
+                eq("fechareservacion", fecha)
+                eq("estatus", "activa")
+            }
+        }.decodeList<Reserva>()
+        reservas.groupBy { it.slot ?: "" }.mapValues { it.value.size }
     }
 
     suspend fun crearReservaConValidacion(
-        userId: Int, amenidadId: Int, fecha: String, slot: String
+        userId: Int, amenidadId: Int, fecha: String, slot: String,
+        capacidad: Int = 1, permiteConcurrencia: Boolean = false
     ): Result<Unit> = runCatching {
         val tomados = client.postgrest["reserva"].select {
             filter {
                 eq("fkamenidad", amenidadId)
-                eq("fecha", fecha)
-                eq("slot", slot)
+                eq("fechareservacion", fecha)
+                eq("horarioslot", slot)
                 eq("estatus", "activa")
             }
         }.decodeList<Reserva>()
-        if (tomados.isNotEmpty()) error("Este horario ya está reservado. Elige otro.")
+        val limite = if (permiteConcurrencia) capacidad else 1
+        if (tomados.size >= limite) error("Este horario ya está lleno. Elige otro.")
         client.postgrest["reserva"].insert(
             Reserva(fkUsuario = userId, fkAmenidad = amenidadId, fecha = fecha, slot = slot)
         )
