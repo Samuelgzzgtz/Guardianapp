@@ -123,4 +123,32 @@ class SecurityRepository {
             filter { eq("id", accesoId) }
         }
     }
+
+    suspend fun getPaseById(paseId: Int): Result<PaseVisita> = runCatching {
+        client.postgrest["pase_visita"]
+            .select { filter { eq("id", paseId) } }
+            .decodeSingle<PaseVisita>()
+    }
+
+    suspend fun registrarAccesoPase(pase: PaseVisita): Result<Unit> = runCatching {
+        val nuevosUsos = (pase.usosRealizados) + 1
+        val agotar     = nuevosUsos >= pase.usosMaximos
+        client.postgrest["pase_visita"]
+            .update({
+                set("usos_realizados", nuevosUsos)
+                if (agotar) set("activo", false)
+            }) {
+                filter { eq("id", pase.id!!) }
+            }
+    }
+
+    suspend fun notificarLlegadaVisitante(fkResidente: Int, nombreVisitante: String): Result<Unit> = runCatching {
+        val notif = Notificacion(
+            fkUsuario = fkResidente,
+            titulo    = "Visitante en puerta",
+            cuerpo    = "$nombreVisitante está esperando en la entrada",
+            estaLeida = false
+        )
+        client.postgrest["notificacion"].insert(notif)
+    }
 }
