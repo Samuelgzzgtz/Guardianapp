@@ -101,6 +101,9 @@ class AuthRepository(private val context: Context) {
         }
 
         // 1. Crear usuario en Supabase Auth (service_role → no afecta sesión actual)
+        // Si el email ya existe en auth.users pero no tiene usuario row, reutilizamos ese auth user.
+        val safePass = password.replace("\\", "\\\\").replace("\"", "\\\"")
+        var authUserIsNew = true  // false if we reused an existing auth.users entry (skip rollback)
         val authUserId = withContext(Dispatchers.IO) {
             val conn = URL("$baseUrl/auth/v1/admin/users").openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
@@ -109,28 +112,59 @@ class AuthRepository(private val context: Context) {
             conn.setRequestProperty("Content-Type", "application/json")
             conn.doOutput = true
             conn.doInput  = true
-            val safePass = password.replace("\\", "\\\\").replace("\"", "\\\"")
             val body = """{"email":"$safeEmail","password":"$safePass","email_confirm":false}"""
             conn.outputStream.use { it.write(body.toByteArray()) }
             val code = conn.responseCode
             if (code !in 200..299) {
                 val err = conn.errorStream?.bufferedReader()?.readText() ?: "HTTP $code"
-                val msg = when {
-                    err.contains("already registered") || err.contains("already been registered") ->
-                        "El email ya está registrado"
-                    err.contains("\"message\"") ->
-                        err.substringAfter("\"message\":\"").substringBefore("\"")
-                    err.contains("\"msg\"") ->
-                        err.substringAfter("\"msg\":\"").substringBefore("\"")
-                    else -> "Error al crear cuenta ($code)"
-                }
                 conn.disconnect()
-                error(msg)
+                if (err.contains("already registered") || err.contains("already been registered")) {
+                    // Auth user exists — check if there's already a usuario row for this email
+                    val checkConn = URL("$baseUrl/rest/v1/usuario?email=eq.${safeEmail.replace("@", "%40")}&select=id")
+                        .openConnection() as HttpURLConnection
+                    checkConn.setRequestProperty("apikey", serviceKey)
+                    checkConn.setRequestProperty("Authorization", "Bearer $serviceKey")
+                    val existing = checkConn.inputStream.bufferedReader().readText()
+                    checkConn.disconnect()
+                    if (existing.trim() != "[]") error("El email ya está registrado en el sistema")
+                    // No usuario row → find the existing auth user and reuse it
+                    val listConn = URL("$baseUrl/auth/v1/admin/users?page=1&per_page=200")
+                        .openConnection() as HttpURLConnection
+                    listConn.setRequestProperty("apikey", serviceKey)
+                    listConn.setRequestProperty("Authorization", "Bearer $serviceKey")
+                    val listBody = listConn.inputStream.bufferedReader().readText()
+                    listConn.disconnect()
+                    // Find id where email matches
+                    val existingId = Regex(""""id"\s*:\s*"([0-9a-f\-]{36})"[^}]*?"email"\s*:\s*"${Regex.escape(safeEmail)}"""")
+                        .find(listBody)?.groupValues?.get(1)
+                        ?: Regex(""""email"\s*:\s*"${Regex.escape(safeEmail)}"[^}]*?"id"\s*:\s*"([0-9a-f\-]{36})"""")
+                            .find(listBody)?.groupValues?.get(1)
+                    if (existingId == null) error("El email ya está registrado en el sistema")
+                    // Update password so the admin-provided credential works
+                    val patchConn = URL("$baseUrl/auth/v1/admin/users/$existingId").openConnection() as HttpURLConnection
+                    patchConn.requestMethod = "PATCH"
+                    patchConn.setRequestProperty("apikey", serviceKey)
+                    patchConn.setRequestProperty("Authorization", "Bearer $serviceKey")
+                    patchConn.setRequestProperty("Content-Type", "application/json")
+                    patchConn.doOutput = true
+                    patchConn.outputStream.use { it.write("""{"password":"$safePass","email_confirm":true}""".toByteArray()) }
+                    patchConn.responseCode
+                    patchConn.disconnect()
+                    authUserIsNew = false
+                    existingId
+                } else {
+                    val msg = when {
+                        err.contains("\"message\"") -> err.substringAfter("\"message\":\"").substringBefore("\"")
+                        err.contains("\"msg\"")     -> err.substringAfter("\"msg\":\"").substringBefore("\"")
+                        else -> "Error al crear cuenta ($code)"
+                    }
+                    error(msg)
+                }
+            } else {
+                val resp = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+                resp.substringAfter("\"id\":\"").substringBefore("\"").takeIf { it.length == 36 }
             }
-            val resp = conn.inputStream.bufferedReader().readText()
-            conn.disconnect()
-            // Extraer id del auth user para rollback si el insert falla
-            resp.substringAfter("\"id\":\"").substringBefore("\"").takeIf { it.length == 36 }
         }
 
         // 2. Insertar en tabla usuario via REST con service_role (bypass RLS)
@@ -180,16 +214,18 @@ class AuthRepository(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            // Rollback: eliminar el auth user para no dejar inconsistencia
-            authUserId?.let { uid ->
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        val conn = URL("$baseUrl/auth/v1/admin/users/$uid").openConnection() as HttpURLConnection
-                        conn.requestMethod = "DELETE"
-                        conn.setRequestProperty("apikey", serviceKey)
-                        conn.setRequestProperty("Authorization", "Bearer $serviceKey")
-                        conn.responseCode
-                        conn.disconnect()
+            // Rollback: solo eliminar si nosotros creamos el auth user (no si lo reutilizamos)
+            if (authUserIsNew) {
+                authUserId?.let { uid ->
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            val conn = URL("$baseUrl/auth/v1/admin/users/$uid").openConnection() as HttpURLConnection
+                            conn.requestMethod = "DELETE"
+                            conn.setRequestProperty("apikey", serviceKey)
+                            conn.setRequestProperty("Authorization", "Bearer $serviceKey")
+                            conn.responseCode
+                            conn.disconnect()
+                        }
                     }
                 }
             }
