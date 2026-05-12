@@ -296,7 +296,7 @@ fun CleaningTasksScreen(userId: Int, vm: CleaningViewModel) {
                         if (notas.isNotBlank()) {
                             HorizontalDivider()
                             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Icon(Icons.Default.Notes, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Icon(Icons.AutoMirrored.Filled.Notes, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(
                                     notas,
                                     style = MaterialTheme.typography.bodySmall,
