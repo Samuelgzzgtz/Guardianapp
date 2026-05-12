@@ -196,7 +196,14 @@ class AuthRepository(private val context: Context) {
 
     // Returns new access token, or null if refresh failed (token expired / invalid)
     suspend fun refreshSession(refreshToken: String): String? = runCatching {
-        val (newAccess, newRefresh) = withContext(Dispatchers.IO) {
+        data class RefreshResult(
+            val accessToken: String,
+            val refreshToken: String,
+            val expiresIn: Long,
+            val expiresAt: Long
+        )
+
+        val result = withContext(Dispatchers.IO) {
             val conn = URL("${SupabaseClientProvider.SUPABASE_URL}/auth/v1/token?grant_type=refresh_token")
                 .openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
@@ -206,33 +213,48 @@ class AuthRepository(private val context: Context) {
             conn.doInput  = true
             conn.outputStream.use { it.write("""{"refresh_token":"$refreshToken"}""".toByteArray()) }
             val code = conn.responseCode
-            if (code !in 200..299) { conn.disconnect(); return@withContext Pair("", "") }
+            if (code !in 200..299) { conn.disconnect(); return@withContext null }
             val body = conn.inputStream.bufferedReader().readText()
             conn.disconnect()
-            Pair(
-                body.substringAfter("\"access_token\":\"").substringBefore("\""),
-                body.substringAfter("\"refresh_token\":\"").substringBefore("\"")
+            val expiresIn  = body.substringAfter("\"expires_in\":").substringBefore(",").trim().toLongOrNull() ?: 3600L
+            val expiresAt  = body.substringAfter("\"expires_at\":").substringBefore(",").trim().toLongOrNull()
+                ?: (System.currentTimeMillis() / 1000L + expiresIn)
+            RefreshResult(
+                accessToken  = body.substringAfter("\"access_token\":\"").substringBefore("\""),
+                refreshToken = body.substringAfter("\"refresh_token\":\"").substringBefore("\""),
+                expiresIn    = expiresIn,
+                expiresAt    = expiresAt
             )
-        }
-        if (newAccess.isBlank()) return@runCatching null
+        } ?: return@runCatching null
+
+        if (result.accessToken.isBlank()) return@runCatching null
+
         val userId = session.userId.firstOrNull()
         val name   = session.userName.firstOrNull() ?: ""
         val role   = session.userRole.firstOrNull() ?: 1
         if (userId != null) {
             session.saveSession(
                 userId = userId, name = name, role = role, unit = "",
-                token = newAccess, refreshToken = newRefresh
+                token = result.accessToken, refreshToken = result.refreshToken
             )
         }
-        // Inject token into Supabase SDK so Realtime connects with user JWT (not anon key).
-        // Without this, RLS blocks all realtime events after session restore from DataStore.
-        runCatching {
-            client.auth.importSession(
-                UserSession(accessToken = newAccess, tokenType = "bearer",
-                            expiresIn = 3600, refreshToken = newRefresh)
+
+        // Inject full session into Supabase SDK so Realtime WebSocket connects with user JWT.
+        // expiresAt MUST be a valid future Instant — a zero/epoch value causes supabase-kt to
+        // treat the session as expired (1970), silently reject importSession(), and fall back to
+        // the anon key for Realtime, which makes RLS block all postgres change events.
+        val expiresAtInstant = kotlinx.datetime.Instant.fromEpochSeconds(result.expiresAt)
+        client.auth.importSession(
+            UserSession(
+                accessToken  = result.accessToken,
+                tokenType    = "bearer",
+                expiresIn    = result.expiresIn,
+                expiresAt    = expiresAtInstant,
+                refreshToken = result.refreshToken
             )
-        }
-        newAccess
+        )
+
+        result.accessToken
     }.getOrNull()
 
     suspend fun saveFcmToken(userId: Int, fcmToken: String) = runCatching {
