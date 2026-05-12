@@ -107,13 +107,17 @@ fun AdminShell(user: AppUser, onLogout: () -> Unit) {
 
 @Composable
 fun AdminDashboard(user: AppUser, vm: AdminViewModel) {
-    val stats     by vm.stats.collectAsStateWithLifecycle()
-    val morosos   by vm.morosos.collectAsStateWithLifecycle()
-    val avisos    by vm.avisos.collectAsStateWithLifecycle()
-    val isLoading by vm.isLoading.collectAsStateWithLifecycle()
+    val stats      by vm.stats.collectAsStateWithLifecycle()
+    val morosos    by vm.morosos.collectAsStateWithLifecycle()
+    val avisos     by vm.avisos.collectAsStateWithLifecycle()
+    val reservas   by vm.reservas.collectAsStateWithLifecycle()
+    val amenidades by vm.amenidades.collectAsStateWithLifecycle()
+    val isLoading  by vm.isLoading.collectAsStateWithLifecycle()
 
-    var showAvisoDialog  by remember { mutableStateOf(false) }
-    var avisoToDelete    by remember { mutableStateOf<com.example.gab.data.model.Aviso?>(null) }
+    var showAvisoDialog    by remember { mutableStateOf(false) }
+    var avisoToDelete      by remember { mutableStateOf<com.example.gab.data.model.Aviso?>(null) }
+    var showReservasDialog by remember { mutableStateOf(false) }
+    var showCobrarDialog   by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -137,8 +141,20 @@ fun AdminDashboard(user: AppUser, vm: AdminViewModel) {
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("Reservas",          "${stats.reservasHoy}",       Icons.Default.EventAvailable, SecurityGreen, Modifier.weight(1f))
-                StatCard("Morosos",           "${morosos.size}",            Icons.Default.Warning,        StatusDanger,  Modifier.weight(1f))
+                StatCard("Reservas", "${stats.reservasHoy}", Icons.Default.EventAvailable, SecurityGreen, Modifier.weight(1f),
+                    onClick = { showReservasDialog = true })
+                StatCard("Morosos", "${morosos.size}", Icons.Default.Warning, StatusDanger, Modifier.weight(1f))
+            }
+        }
+
+        item {
+            OutlinedButton(
+                onClick = { showCobrarDialog = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.AttachMoney, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Cobrar mensualidad a todos")
             }
         }
 
@@ -234,6 +250,21 @@ fun AdminDashboard(user: AppUser, vm: AdminViewModel) {
                 ) { Text("Eliminar") }
             },
             dismissButton = { TextButton(onClick = { avisoToDelete = null }) { Text("Cancelar") } }
+        )
+    }
+
+    if (showReservasDialog) {
+        ReservasAdminDialog(
+            reservas   = reservas,
+            amenidades = amenidades,
+            onDismiss  = { showReservasDialog = false }
+        )
+    }
+
+    if (showCobrarDialog) {
+        CobrarMensualidadDialog(
+            onDismiss = { showCobrarDialog = false },
+            onCobrar  = { monto -> vm.cobrarMensualidad(monto); showCobrarDialog = false }
         )
     }
 }
@@ -1322,4 +1353,95 @@ private fun ResidenteDetalleDialog(
             }
         }
     }
+}
+
+@Composable
+private fun ReservasAdminDialog(
+    reservas: List<Reserva>,
+    amenidades: List<Amenidad>,
+    onDismiss: () -> Unit
+) {
+    val amenidadMap = amenidades.associateBy { it.id }
+    Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Reservas activas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                if (reservas.isEmpty()) {
+                    EmptyState("Sin reservas registradas")
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 400.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(reservas, key = { it.id ?: 0 }) { r ->
+                            val amenidadNombre = amenidadMap[r.fkAmenidad]?.nombre ?: "Amenidad #${r.fkAmenidad}"
+                            val (chipColor, chipText) = when (r.estatus) {
+                                "activa"    -> SecurityGreen to "Activa"
+                                "cancelada" -> StatusDanger  to "Cancelada"
+                                else        -> StatusWarning to r.estatus
+                            }
+                            GuardianCard {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(amenidadNombre, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            "${r.fecha ?: "—"}  ·  ${r.slot ?: "—"}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    StatusChip(chipText, chipColor)
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cerrar") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CobrarMensualidadDialog(
+    onDismiss: () -> Unit,
+    onCobrar: (Double) -> Unit
+) {
+    var montoText by remember { mutableStateOf("1500.00") }
+    val monto = montoText.toDoubleOrNull()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Cobrar mensualidad") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Genera una cuota pendiente para todos los residentes activos que no tengan cuota del mes actual.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = montoText,
+                    onValueChange = { montoText = it },
+                    label = { Text("Monto ($)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = monto == null || monto <= 0
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { monto?.let { onCobrar(it); onDismiss() } },
+                enabled = monto != null && monto > 0,
+                colors = ButtonDefaults.buttonColors(containerColor = AdminPurple)
+            ) { Text("Cobrar a todos") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
 }

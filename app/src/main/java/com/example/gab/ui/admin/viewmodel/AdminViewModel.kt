@@ -58,6 +58,9 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     private val _tareasLimpieza = MutableStateFlow<List<TareaLimpieza>>(emptyList())
     val tareasLimpieza: StateFlow<List<TareaLimpieza>> = _tareasLimpieza.asStateFlow()
 
+    private val _amenidades = MutableStateFlow<List<Amenidad>>(emptyList())
+    val amenidades: StateFlow<List<Amenidad>> = _amenidades.asStateFlow()
+
     private var selectedLimpiezaUserId: Int? = null
 
     private val _isLoading    = MutableStateFlow(false)
@@ -83,6 +86,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             repo.getUnidadesConEstatus().onSuccess { _unidadesConEstatus.value = it }
             repo.getMorosos().onSuccess      { _morosos.value  = it }
             repo.getAvisos().onSuccess       { _avisos.value   = it }
+            repo.getAmenidades().onSuccess   { _amenidades.value = it }
             _isLoading.value = false
         }
         startRealtime()
@@ -231,8 +235,27 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     fun marcarCuotaPagada(cuotaId: Int) {
         viewModelScope.launch {
             repo.marcarCuotaPagada(cuotaId)
-                .onSuccess { loadUsuarios() }
+                .onSuccess {
+                    loadUsuarios()
+                    repo.getMorosos().onSuccess      { _morosos.value = it }
+                    repo.getEstadisticas().onSuccess { _stats.value   = it }
+                }
                 .onFailure { Log.e("AdminVM", "marcarCuotaPagada error", it) }
+        }
+    }
+
+    fun cobrarMensualidad(monto: Double) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            repo.cobrarMensualidad(monto)
+                .onSuccess { count ->
+                    _toastMessage.value = if (count > 0) "Mensualidad generada para $count residentes"
+                                         else "Todos los residentes ya tienen cuota este mes"
+                    repo.getEstadisticas().onSuccess { _stats.value   = it }
+                    repo.getMorosos().onSuccess      { _morosos.value = it }
+                }
+                .onFailure { _toastMessage.value = "Error al cobrar: ${it.message}" }
+            _isLoading.value = false
         }
     }
 

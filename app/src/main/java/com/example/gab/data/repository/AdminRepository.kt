@@ -6,6 +6,8 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -57,7 +59,18 @@ class AdminRepository {
     }
 
     suspend fun getReservas(): Result<List<Reserva>> = runCatching {
-        client.postgrest["reserva"].select().decodeList()
+        client.postgrest["reserva"].select {
+            order("id", Order.DESCENDING)
+        }.decodeList()
+    }
+
+    suspend fun getAmenidades(): Result<List<Amenidad>> = runCatching {
+        client.postgrest["amenidad"].select().decodeList()
+    }
+
+    suspend fun cobrarMensualidad(monto: Double): Result<Int> = runCatching {
+        val resp = client.postgrest.rpc("generar_cuotas_mensuales", buildJsonObject { put("p_monto", monto) })
+        resp.data.trim().trim('"').toIntOrNull() ?: 0
     }
 
     suspend fun getUnidades(): Result<List<Unidad>> = runCatching {
