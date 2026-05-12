@@ -39,6 +39,9 @@ class SecurityViewModel : ViewModel() {
     private val _residenteEscaneado = MutableStateFlow<Usuario?>(null)
     val residenteEscaneado: StateFlow<Usuario?> = _residenteEscaneado.asStateFlow()
 
+    private val _vehiculosEscaneado = MutableStateFlow<List<Vehiculo>>(emptyList())
+    val vehiculosEscaneado: StateFlow<List<Vehiculo>> = _vehiculosEscaneado.asStateFlow()
+
     private val _showIneCamera     = MutableStateFlow(false)
     val showIneCamera: StateFlow<Boolean> = _showIneCamera.asStateFlow()
 
@@ -164,8 +167,14 @@ class SecurityViewModel : ViewModel() {
         viewModelScope.launch {
             repo.getResidentePorId(userId)
                 .onSuccess { residente ->
-                    if (residente == null) _toastMessage.value = "Residente no encontrado"
-                    else _residenteEscaneado.value = residente
+                    if (residente == null) {
+                        _toastMessage.value = "Residente no encontrado"
+                    } else {
+                        _residenteEscaneado.value = residente
+                        repo.getVehiculosPorResidente(userId)
+                            .onSuccess { _vehiculosEscaneado.value = it }
+                            .onFailure { _vehiculosEscaneado.value = emptyList() }
+                    }
                 }
                 .onFailure { _toastMessage.value = "Error al leer QR: ${it.message}" }
         }
@@ -214,7 +223,7 @@ class SecurityViewModel : ViewModel() {
         }
     }
 
-    fun clearResidenteEscaneado() { _residenteEscaneado.value = null }
+    fun clearResidenteEscaneado() { _residenteEscaneado.value = null; _vehiculosEscaneado.value = emptyList() }
 
     // ── INE ─────────────────────────────────────────────────────────────────
     fun abrirCamaraIne()  { _showIneCamera.value = true }

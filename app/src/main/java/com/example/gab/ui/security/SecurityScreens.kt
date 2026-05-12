@@ -322,6 +322,7 @@ private fun RegisterAccessDialog(
 @Composable
 fun SecurityQrScreen(user: AppUser, vm: SecurityViewModel) {
     val residenteEscaneado by vm.residenteEscaneado.collectAsStateWithLifecycle()
+    val vehiculosEscaneado by vm.vehiculosEscaneado.collectAsStateWithLifecycle()
     val qrScanResult by vm.qrScanResult.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -376,9 +377,10 @@ fun SecurityQrScreen(user: AppUser, vm: SecurityViewModel) {
 
     residenteEscaneado?.let { residente ->
         QrAccessDialog(
-            residente = residente,
-            onDismiss = { vm.clearResidenteEscaneado() },
-            onConfirm = { direccion -> vm.registrarAccesoQr(user.id, residente, direccion) }
+            residente  = residente,
+            vehiculos  = vehiculosEscaneado,
+            onDismiss  = { vm.clearResidenteEscaneado() },
+            onConfirm  = { direccion -> vm.registrarAccesoQr(user.id, residente, direccion) }
         )
     }
 
@@ -456,6 +458,7 @@ private fun PaseErrorDialog(
 @Composable
 private fun QrAccessDialog(
     residente: Usuario,
+    vehiculos: List<Vehiculo>,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
@@ -465,7 +468,45 @@ private fun QrAccessDialog(
         title = { Text("Residente identificado") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // INE photo
+                if (!residente.ineUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model              = residente.ineUrl,
+                        contentDescription = "INE de ${residente.nombre}",
+                        modifier           = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale       = ContentScale.Crop
+                    )
+                }
                 Text(residente.nombre, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                // Vehicles
+                if (vehiculos.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Vehículos registrados:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        vehiculos.forEach { v ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(Icons.Default.DirectionsCar, null, modifier = Modifier.size(14.dp), tint = SecurityGreen)
+                                Text(
+                                    buildString {
+                                        append(v.placa)
+                                        if (!v.descripcion.isNullOrBlank()) append(" · ${v.descripcion}")
+                                        if (!v.color.isNullOrBlank()) append(" (${v.color})")
+                                    },
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("ENTRADA", "SALIDA").forEach { dir ->
                         FilterChip(
