@@ -161,4 +161,10 @@ class SecurityRepository {
         if (query.isBlank()) emptyList()
         else all.filter { it.nombre.contains(query, ignoreCase = true) }
     }
+
+    suspend fun getUnidadPorId(unidadId: Int): Result<Unidad?> = runCatching {
+        client.postgrest["unidad"].select {
+            filter { eq("id", unidadId) }
+        }.decodeList<Unidad>().firstOrNull()
+    }
 }

@@ -33,6 +33,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import com.example.gab.data.model.Reporte
+import com.example.gab.data.model.Unidad
 import com.example.gab.data.model.Usuario
 import com.example.gab.data.model.Vehiculo
 import com.example.gab.ui.common.*
@@ -323,7 +324,8 @@ private fun RegisterAccessDialog(
 fun SecurityQrScreen(user: AppUser, vm: SecurityViewModel) {
     val residenteEscaneado by vm.residenteEscaneado.collectAsStateWithLifecycle()
     val vehiculosEscaneado by vm.vehiculosEscaneado.collectAsStateWithLifecycle()
-    val qrScanResult by vm.qrScanResult.collectAsStateWithLifecycle()
+    val unidadEscaneado    by vm.unidadEscaneado.collectAsStateWithLifecycle()
+    val qrScanResult       by vm.qrScanResult.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     val scanLauncher = rememberLauncherForActivityResult(
@@ -379,6 +381,7 @@ fun SecurityQrScreen(user: AppUser, vm: SecurityViewModel) {
         QrAccessDialog(
             residente  = residente,
             vehiculos  = vehiculosEscaneado,
+            unidad     = unidadEscaneado,
             onDismiss  = { vm.clearResidenteEscaneado() },
             onConfirm  = { direccion -> vm.registrarAccesoQr(user.id, residente, direccion) }
         )
@@ -459,6 +462,7 @@ private fun PaseErrorDialog(
 private fun QrAccessDialog(
     residente: Usuario,
     vehiculos: List<Vehiculo>,
+    unidad: Unidad?,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
@@ -481,6 +485,16 @@ private fun QrAccessDialog(
                     )
                 }
                 Text(residente.nombre, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                // Unit (where they live)
+                if (unidad != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Default.Home, null, modifier = Modifier.size(14.dp), tint = SecurityGreen)
+                        Text(unidad.displayUbicacion(), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
                 // Vehicles
                 if (vehiculos.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -708,6 +722,7 @@ fun SecurityPlacasScreen(user: AppUser, vm: SecurityViewModel) {
     val vehiculosResidente    by vm.vehiculosResidente.collectAsStateWithLifecycle()
     val autoRegistrado        by vm.autoRegistrado.collectAsStateWithLifecycle()
     val residenteInfo         by vm.residentePlacaInfo.collectAsStateWithLifecycle()
+    val unidadPlacaInfo       by vm.unidadPlacaInfo.collectAsStateWithLifecycle()
 
     var busqueda by remember { mutableStateOf("") }
     var showResidenteDropdown by remember { mutableStateOf(false) }
@@ -853,9 +868,10 @@ fun SecurityPlacasScreen(user: AppUser, vm: SecurityViewModel) {
         placaResult?.let { (placa, vehiculo) ->
             item {
                 PlacaResultCard(
-                    placa        = placa,
-                    vehiculo     = vehiculo,
-                    residente    = residenteInfo
+                    placa     = placa,
+                    vehiculo  = vehiculo,
+                    residente = residenteInfo,
+                    unidad    = unidadPlacaInfo
                 )
             }
         }
@@ -863,7 +879,7 @@ fun SecurityPlacasScreen(user: AppUser, vm: SecurityViewModel) {
 }
 
 @Composable
-private fun PlacaResultCard(placa: String, vehiculo: Vehiculo?, residente: Usuario?) {
+private fun PlacaResultCard(placa: String, vehiculo: Vehiculo?, residente: Usuario?, unidad: Unidad?) {
     val coincide = vehiculo != null
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -916,6 +932,12 @@ private fun PlacaResultCard(placa: String, vehiculo: Vehiculo?, residente: Usuar
                     }
                     Column(Modifier.weight(1f)) {
                         Text(residente.nombre, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                        if (unidad != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Icon(Icons.Default.Home, null, tint = SecurityGreen, modifier = Modifier.size(14.dp))
+                                Text(unidad.displayUbicacion(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                         if (!residente.ineUrl.isNullOrBlank()) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Icon(Icons.Default.Badge, null, tint = SecurityGreen, modifier = Modifier.size(14.dp))

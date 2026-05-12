@@ -42,6 +42,12 @@ class SecurityViewModel : ViewModel() {
     private val _vehiculosEscaneado = MutableStateFlow<List<Vehiculo>>(emptyList())
     val vehiculosEscaneado: StateFlow<List<Vehiculo>> = _vehiculosEscaneado.asStateFlow()
 
+    private val _unidadEscaneado = MutableStateFlow<Unidad?>(null)
+    val unidadEscaneado: StateFlow<Unidad?> = _unidadEscaneado.asStateFlow()
+
+    private val _unidadPlacaInfo = MutableStateFlow<Unidad?>(null)
+    val unidadPlacaInfo: StateFlow<Unidad?> = _unidadPlacaInfo.asStateFlow()
+
     private val _showIneCamera     = MutableStateFlow(false)
     val showIneCamera: StateFlow<Boolean> = _showIneCamera.asStateFlow()
 
@@ -174,6 +180,11 @@ class SecurityViewModel : ViewModel() {
                         repo.getVehiculosPorResidente(userId)
                             .onSuccess { _vehiculosEscaneado.value = it }
                             .onFailure { _vehiculosEscaneado.value = emptyList() }
+                        residente.fkUnidad?.let { uid ->
+                            repo.getUnidadPorId(uid)
+                                .onSuccess { _unidadEscaneado.value = it }
+                                .onFailure { _unidadEscaneado.value = null }
+                        }
                     }
                 }
                 .onFailure { _toastMessage.value = "Error al leer QR: ${it.message}" }
@@ -223,7 +234,11 @@ class SecurityViewModel : ViewModel() {
         }
     }
 
-    fun clearResidenteEscaneado() { _residenteEscaneado.value = null; _vehiculosEscaneado.value = emptyList() }
+    fun clearResidenteEscaneado() {
+        _residenteEscaneado.value = null
+        _vehiculosEscaneado.value = emptyList()
+        _unidadEscaneado.value = null
+    }
 
     // ── INE ─────────────────────────────────────────────────────────────────
     fun abrirCamaraIne()  { _showIneCamera.value = true }
@@ -277,6 +292,7 @@ class SecurityViewModel : ViewModel() {
         _vehiculosResidente.value = emptyList()
         _placaResultado.value = null
         _residentePlacaInfo.value = null
+        _unidadPlacaInfo.value = null
     }
 
     fun abrirCamaraPlaca()  { _showPlacaCamera.value = true }
@@ -307,11 +323,18 @@ class SecurityViewModel : ViewModel() {
                     guardiaId, "PLACA"
                 ).onSuccess { repo.getVisitas().onSuccess { _visitas.value = it } }
 
-                // Cargar datos del residente (nombre, foto INE) para mostrar en UI
+                // Cargar datos del residente (nombre, foto INE, unidad) para mostrar en UI
                 val ownerUserId = vehiculoCorrecto.fkUsuario ?: residente?.id
                 if (ownerUserId != null) {
                     repo.getResidentePorId(ownerUserId)
-                        .onSuccess { _residentePlacaInfo.value = it }
+                        .onSuccess { owner ->
+                            _residentePlacaInfo.value = owner
+                            owner?.fkUnidad?.let { uid ->
+                                repo.getUnidadPorId(uid)
+                                    .onSuccess { _unidadPlacaInfo.value = it }
+                                    .onFailure { _unidadPlacaInfo.value = null }
+                            }
+                        }
                 }
 
                 // Auto-register building access when resident was pre-selected and plate matches
