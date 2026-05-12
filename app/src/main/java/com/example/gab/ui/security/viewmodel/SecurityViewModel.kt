@@ -247,11 +247,16 @@ class SecurityViewModel : ViewModel() {
     fun onIneTextoReconocido(texto: String) {
         _showIneCamera.value = false
         val lineas = texto.lines().map { it.trim() }.filter { it.isNotBlank() }
-        val nombreEstimado = lineas
-            .filter { line -> line.all { it.isLetter() || it.isWhitespace() } && line.length > 4 }
-            .maxByOrNull { it.length } ?: lineas.firstOrNull() ?: texto.take(50)
+        // Lines that look like names: only letters/spaces, no numbers, length > 3
+        val soloLetras = lineas.filter { line ->
+            line.all { it.isLetter() || it.isWhitespace() } && line.length > 3
+        }
+        // Concatenate all name-like lines for broader matching (INE splits apellidos across lines)
+        val nombreEstimado = if (soloLetras.isNotEmpty())
+            soloLetras.joinToString(" ")
+        else
+            lineas.firstOrNull() ?: texto.take(80)
         _ineTextoReconocido.value = nombreEstimado
-        // Buscar en DB si el texto coincide con algún residente
         if (nombreEstimado.length >= 3) {
             viewModelScope.launch {
                 repo.buscarResidentePorNombre(nombreEstimado)
@@ -297,6 +302,59 @@ class SecurityViewModel : ViewModel() {
 
     fun abrirCamaraPlaca()  { _showPlacaCamera.value = true }
     fun cerrarCamaraPlaca() { _showPlacaCamera.value = false; _placaResultado.value = null }
+
+    fun confirmarPlacaManual(guardiaId: Int, placaTexto: String) {
+        viewModelScope.launch {
+            val placaNormalizada = placaTexto.trim().replace(" ", "").replace("-", "").uppercase()
+            if (placaNormalizada.length < 4) {
+                _toastMessage.value = "Ingresa una placa válida"
+                return@launch
+            }
+            val residente = _residenteParaPlaca.value
+            val vehiculoCorrecto = if (residente != null) {
+                _vehiculosResidente.value.firstOrNull { v ->
+                    v.placa.uppercase().replace(" ", "").replace("-", "") == placaNormalizada
+                }
+            } else {
+                repo.getVehiculoPorPlaca(placaNormalizada).getOrNull()
+            }
+            _placaResultado.value = Pair(placaNormalizada, vehiculoCorrecto)
+
+            if (vehiculoCorrecto != null) {
+                repo.guardarVisita(
+                    "Vehículo ${vehiculoCorrecto.placa} (${vehiculoCorrecto.descripcion ?: ""})",
+                    guardiaId, "PLACA"
+                ).onSuccess { repo.getVisitas().onSuccess { _visitas.value = it } }
+
+                val ownerUserId = vehiculoCorrecto.fkUsuario ?: residente?.id
+                if (ownerUserId != null) {
+                    repo.getResidentePorId(ownerUserId)
+                        .onSuccess { owner ->
+                            _residentePlacaInfo.value = owner
+                            owner?.fkUnidad?.let { uid ->
+                                repo.getUnidadPorId(uid)
+                                    .onSuccess { _unidadPlacaInfo.value = it }
+                                    .onFailure { _unidadPlacaInfo.value = null }
+                            }
+                        }
+                }
+
+                if (residente != null) {
+                    val hora = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+                    repo.registrarAccesoConId(residente.id, guardiaId, "ENTRADA", hora)
+                        .onSuccess { accesoId ->
+                            _ultimoAccesoId.value = accesoId
+                            _autoRegistrado.value = true
+                            repo.getAccesoLog().onSuccess { _accesoLog.value = it }
+                        }
+                        .onFailure { _toastMessage.value = "Error al registrar acceso: ${it.message}" }
+                }
+            } else {
+                _residentePlacaInfo.value = null
+                _unidadPlacaInfo.value = null
+            }
+        }
+    }
 
     fun onPlacaTextoReconocido(guardiaId: Int, texto: String) {
         _showPlacaCamera.value = false

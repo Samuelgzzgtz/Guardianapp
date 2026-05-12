@@ -726,6 +726,7 @@ fun SecurityPlacasScreen(user: AppUser, vm: SecurityViewModel) {
 
     var busqueda by remember { mutableStateOf("") }
     var showResidenteDropdown by remember { mutableStateOf(false) }
+    var placaManual by remember { mutableStateOf("") }
 
     if (showCamera) {
         MlKitCameraScreen(
@@ -850,16 +851,41 @@ fun SecurityPlacasScreen(user: AppUser, vm: SecurityViewModel) {
                 }
             }
 
-            // Step 3: Scan plate to confirm
+            // Step 3: Enter or scan plate
             item {
-                Button(
-                    onClick = { vm.abrirCamaraPlaca() },
-                    colors = ButtonDefaults.buttonColors(containerColor = SecurityGreen),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.CameraAlt, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("3. Escanear placa para confirmar")
+                GuardianCard {
+                    Text("3. Verificar placa", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = placaManual,
+                        onValueChange = { placaManual = it.uppercase() },
+                        label = { Text("Placa del vehículo") },
+                        leadingIcon = { Icon(Icons.Default.DirectionsCar, null) },
+                        placeholder = { Text("Ej: ABC1234") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = { vm.confirmarPlacaManual(user.id, placaManual) },
+                            enabled = placaManual.length >= 4,
+                            colors = ButtonDefaults.buttonColors(containerColor = SecurityGreen),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Search, null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Buscar")
+                        }
+                        OutlinedButton(
+                            onClick = { vm.abrirCamaraPlaca() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.CameraAlt, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Escanear")
+                        }
+                    }
                 }
             }
         }

@@ -154,6 +154,9 @@ class AuthRepository(private val context: Context) {
                     val msg = when {
                         err.contains("unique_unidad") || err.contains("idx_unique_unidad") ->
                             "Esta unidad ya está ocupada"
+                        err.contains("unique") && err.contains("email") ||
+                        err.contains("duplicate key") && err.contains("email") ->
+                            "El email ya está registrado en el sistema"
                         else -> "Error al registrar perfil: $err"
                     }
                     error(msg)

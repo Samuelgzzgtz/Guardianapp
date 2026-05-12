@@ -153,13 +153,27 @@ class SecurityRepository {
         client.postgrest["notificacion"].insert(notif)
     }
 
-    /** Busca residentes cuyo nombre contenga el query (case-insensitive). */
+    /** Busca residentes cuyo nombre coincida con alguna palabra del query (OCR de INE). */
     suspend fun buscarResidentePorNombre(query: String): Result<List<Usuario>> = runCatching {
         val all = client.postgrest["usuario"].select {
             filter { eq("fkrolusuario", 1) }
         }.decodeList<Usuario>()
-        if (query.isBlank()) emptyList()
-        else all.filter { it.nombre.contains(query, ignoreCase = true) }
+        if (query.isBlank()) return@runCatching emptyList()
+        // Exact substring match first
+        val exactos = all.filter { it.nombre.contains(query, ignoreCase = true) }
+        if (exactos.isNotEmpty()) return@runCatching exactos
+        // Word-by-word: strip accents + match significant words (length ≥ 4)
+        fun normalize(s: String) = s.lowercase()
+            .replace('á','a').replace('é','e').replace('í','i').replace('ó','o').replace('ú','u')
+            .replace('ñ','n')
+        val words = query.split(Regex("\\s+"))
+            .map { normalize(it) }
+            .filter { it.length >= 4 }
+        if (words.isEmpty()) return@runCatching emptyList()
+        all.filter { u ->
+            val nombreNorm = normalize(u.nombre)
+            words.any { w -> nombreNorm.contains(w) }
+        }
     }
 
     suspend fun getUnidadPorId(unidadId: Int): Result<Unidad?> = runCatching {
