@@ -62,6 +62,9 @@ fun ResidentShell(user: AppUser, onLogout: () -> Unit) {
         navItems = navItems,
         topBarTitle = "GuardianApp",
         topBarActions = {
+            IconButton(onClick = { vm.loadAll(user.id) }) {
+                Icon(Icons.Default.Refresh, contentDescription = "Actualizar")
+            }
             IconButton(onClick = onLogout) {
                 Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Salir")
             }
