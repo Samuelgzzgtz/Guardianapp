@@ -86,7 +86,12 @@ fun AdminShell(user: AppUser, onLogout: () -> Unit) {
             }
             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                 DropdownMenuItem(
-                    text = { Text("Recordatorio push (FCM)") },
+                    text = { Text("Prueba push (este dispositivo)") },
+                    leadingIcon = { Icon(Icons.Default.NotificationsActive, null) },
+                    onClick = { vm.enviarPruebaPush(user.id); showMenu = false }
+                )
+                DropdownMenuItem(
+                    text = { Text("Recordatorio push (todos)") },
                     leadingIcon = { Icon(Icons.Default.Notifications, null) },
                     onClick = { vm.dispararRecordatorioPago(); showMenu = false }
                 )

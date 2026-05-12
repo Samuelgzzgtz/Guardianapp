@@ -310,6 +310,16 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun enviarPruebaPush(adminUserId: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            repo.sendTestPush(adminUserId)
+                .onSuccess { _toastMessage.value = "Push de prueba enviado — revisa tu dispositivo" }
+                .onFailure { _toastMessage.value = "Error al enviar push de prueba: ${it.message}" }
+            _isLoading.value = false
+        }
+    }
+
     fun dispararRecordatorioPago() {
         viewModelScope.launch {
             _isLoading.value = true

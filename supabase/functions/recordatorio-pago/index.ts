@@ -19,12 +19,14 @@ async function getFcmAccessToken(): Promise<string> {
     exp:   now + 3600,
   };
 
-  const encode = (obj: object) =>
-    btoa(JSON.stringify(obj)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  // Safe base64url — avoids spread of large Uint8Array (stack overflow with RSA-2048)
+  const b64url = (data: string | Uint8Array): string => {
+    const str = typeof data === "string" ? data : Array.from(data, b => String.fromCharCode(b)).join("");
+    return btoa(str).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  };
 
-  const signingInput = `${encode(header)}.${encode(payload)}`;
+  const signingInput = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(payload))}`;
 
-  // Parse PEM private key
   const pem = FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n");
   const pemBody = pem
     .replace("-----BEGIN PRIVATE KEY-----", "")
@@ -46,10 +48,7 @@ async function getFcmAccessToken(): Promise<string> {
     new TextEncoder().encode(signingInput)
   );
 
-  const sig = btoa(String.fromCharCode(...new Uint8Array(sigBytes)))
-    .replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-
-  const jwt = `${signingInput}.${sig}`;
+  const jwt = `${signingInput}.${b64url(new Uint8Array(sigBytes))}`;
 
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",

@@ -19,10 +19,13 @@ async function getFcmAccessToken(): Promise<string> {
     exp:   now + 3600,
   };
 
-  const encode = (obj: object) =>
-    btoa(JSON.stringify(obj)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  // Safe base64url encode — no spread of large arrays
+  const b64url = (data: string | Uint8Array): string => {
+    const str = typeof data === "string" ? data : Array.from(data, b => String.fromCharCode(b)).join("");
+    return btoa(str).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  };
 
-  const signingInput = `${encode(header)}.${encode(payload)}`;
+  const signingInput = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(payload))}`;
 
   const pem = FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n");
   const pemBody = pem
@@ -45,9 +48,8 @@ async function getFcmAccessToken(): Promise<string> {
     new TextEncoder().encode(signingInput)
   );
 
-  const sig = btoa(String.fromCharCode(...new Uint8Array(sigBytes)))
-    .replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-
+  // Fix: avoid spreading large Uint8Array into String.fromCharCode (stack overflow for RSA-2048)
+  const sig = b64url(new Uint8Array(sigBytes));
   const jwt = `${signingInput}.${sig}`;
 
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -56,7 +58,7 @@ async function getFcmAccessToken(): Promise<string> {
     body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
   });
   const tokenData = await tokenRes.json();
-  if (!tokenData.access_token) throw new Error(`Token error: ${JSON.stringify(tokenData)}`);
+  if (!tokenData.access_token) throw new Error(`FCM OAuth failed: ${JSON.stringify(tokenData)}`);
   return tokenData.access_token;
 }
 
@@ -88,46 +90,60 @@ async function sendFcmNotification(
   );
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`FCM send failed: ${err}`);
+    throw new Error(`FCM send failed (${res.status}): ${err}`);
   }
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 serve(async (req) => {
-  const payload = await req.json();
-  // Support both Supabase Database Webhook (has `record`) and direct HTTP POST
-  const record = payload.record ?? payload;
-  const destinatarioId: number = record.fkusuario ?? record.userId;
-
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-  const { data: user } = await supabase
-    .from("usuario")
-    .select("fcmtoken, nombre")
-    .eq("id", destinatarioId)
-    .single();
-
-  if (!user?.fcmtoken) {
-    return new Response("no fcm token for user", { status: 200 });
-  }
-
-  let accessToken: string;
   try {
-    accessToken = await getFcmAccessToken();
-  } catch (e) {
-    return new Response(JSON.stringify({ error: `FCM auth failed: ${e.message}` }), { status: 500 });
-  }
+    const payload = await req.json();
+    // Support both Supabase Database Webhook (has `record`) and direct HTTP POST
+    const record = payload.record ?? payload;
+    const destinatarioId: number = record.fkusuario ?? record.userId;
 
-  try {
+    if (!destinatarioId) {
+      return new Response(JSON.stringify({ error: "userId o fkusuario requerido" }), {
+        status: 400, headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+    const { data: user, error: dbErr } = await supabase
+      .from("usuario")
+      .select("fcmtoken, nombre")
+      .eq("id", destinatarioId)
+      .single();
+
+    if (dbErr) {
+      return new Response(JSON.stringify({ error: `DB error: ${dbErr.message}` }), {
+        status: 500, headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (!user?.fcmtoken) {
+      return new Response(JSON.stringify({ ok: false, reason: "no fcm token for user" }), {
+        status: 200, headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const accessToken = await getFcmAccessToken();
+
     await sendFcmNotification(
       accessToken,
       user.fcmtoken,
-      record.titulo  ?? "GuardianApp",
-      record.cuerpo ?? record.mensaje ?? record.body ?? "",
-      { notificacion_id: String(record.id) }
+      record.titulo  ?? record.title  ?? "GuardianApp",
+      record.cuerpo  ?? record.mensaje ?? record.body ?? "",
+      { notificacion_id: String(record.id ?? "") }
     );
-  } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
-  }
 
-  return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    return new Response(JSON.stringify({ ok: true, usuario: user.nombre }), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    });
+
+  } catch (e) {
+    return new Response(JSON.stringify({ error: String(e) }), {
+      status: 500, headers: { "Content-Type": "application/json" },
+    });
+  }
 });
