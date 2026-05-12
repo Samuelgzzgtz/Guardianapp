@@ -101,6 +101,8 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             val cleaningChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "tarealimpieza" }
             val reservaChanges  = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "reserva" }
             val cuotaChanges    = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "cuota" }
+            val avisoChanges    = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "aviso" }
+            val usuarioChanges  = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "usuario" }
             channel.subscribe()
             launch {
                 reporteChanges.collect {
@@ -124,7 +126,19 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             launch {
                 cuotaChanges.collect {
                     repo.getEstadisticas().onSuccess { _stats.value   = it }
-                    repo.getMorosos().onSuccess       { _morosos.value = it }
+                    repo.getMorosos().onSuccess      { _morosos.value = it }
+                }
+            }
+            launch {
+                avisoChanges.collect {
+                    repo.getAvisos().onSuccess { _avisos.value = it }
+                }
+            }
+            launch {
+                usuarioChanges.collect {
+                    repo.getUsuarios().onSuccess           { _usuarios.value          = it }
+                    repo.getUnidadesConEstatus().onSuccess { _unidadesConEstatus.value = it }
+                    repo.getEstadisticas().onSuccess       { _stats.value             = it }
                 }
             }
         }

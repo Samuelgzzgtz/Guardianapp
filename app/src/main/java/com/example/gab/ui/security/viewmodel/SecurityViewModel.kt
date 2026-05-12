@@ -104,9 +104,11 @@ class SecurityViewModel : ViewModel() {
             realtimeChannel = channel
             val accesoChanges    = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "accesolog" }
             val incidenteChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "reporte" }
+            val residenteChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "usuario" }
             channel.subscribe()
             launch { accesoChanges.collect    { repo.getAccesoLog().onSuccess  { _accesoLog.value  = it } } }
             launch { incidenteChanges.collect { repo.getIncidentes().onSuccess { _incidentes.value = it } } }
+            launch { residenteChanges.collect { repo.getResidentes().onSuccess { _residentes.value = it } } }
         }
     }
 

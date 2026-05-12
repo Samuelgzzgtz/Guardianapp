@@ -173,10 +173,17 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
             val reservaChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "reserva" }
             val avisoChanges   = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "aviso" }
             val reporteChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "reporte" }
+            val cuotaChanges   = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "cuota" }
             channel.subscribe()
-            launch { reservaChanges.collect { repo.getReservas(userId).onSuccess { _reservas.value = it } } }
-            launch { avisoChanges.collect   { repo.getAvisos().onSuccess          { _avisos.value   = it } } }
-            launch { reporteChanges.collect { repo.getReportes(userId).onSuccess  { _reportes.value = it } } }
+            launch { reservaChanges.collect { repo.getReservas(userId).onSuccess      { _reservas.value      = it } } }
+            launch { avisoChanges.collect   { repo.getAvisos().onSuccess              { _avisos.value        = it } } }
+            launch { reporteChanges.collect { repo.getReportes(userId).onSuccess      { _reportes.value      = it } } }
+            launch {
+                cuotaChanges.collect {
+                    repo.getCuota(userId).onSuccess           { _cuota.value          = it }
+                    repo.getHistorialCuotas(userId).onSuccess { _historialCuotas.value = it }
+                }
+            }
         }
     }
 
