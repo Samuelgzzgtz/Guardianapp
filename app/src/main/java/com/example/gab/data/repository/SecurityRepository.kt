@@ -152,4 +152,13 @@ class SecurityRepository {
         )
         client.postgrest["notificacion"].insert(notif)
     }
+
+    /** Busca residentes cuyo nombre contenga el query (case-insensitive). */
+    suspend fun buscarResidentePorNombre(query: String): Result<List<Usuario>> = runCatching {
+        val all = client.postgrest["usuario"].select {
+            filter { eq("fkrolusuario", 1) }
+        }.decodeList<Usuario>()
+        if (query.isBlank()) emptyList()
+        else all.filter { it.nombre.contains(query, ignoreCase = true) }
+    }
 }

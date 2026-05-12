@@ -1,8 +1,11 @@
 package com.example.gab.ui.resident
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.*
@@ -10,11 +13,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.example.gab.ui.common.AvatarCircle
 import com.example.gab.ui.common.GuardianCard
 import com.example.gab.ui.navigation.AppUser
@@ -30,9 +36,14 @@ import com.journeyapps.barcodescanner.BarcodeEncoder
 fun ResidentProfileScreen(user: AppUser, vm: ResidentViewModel, onLogout: () -> Unit) {
     val unidad    by vm.unidad.collectAsStateWithLifecycle()
     val vehiculos by vm.vehiculos.collectAsStateWithLifecycle()
+    val ineUrl    by vm.ineUrl.collectAsStateWithLifecycle()
     var notificationsEnabled by remember { mutableStateOf(true) }
     var emailAlerts by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+
+    val ineLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { vm.subirFotoIne(user.id, it) }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -120,6 +131,14 @@ fun ResidentProfileScreen(user: AppUser, vm: ResidentViewModel, onLogout: () -> 
                 vehiculos = vehiculos,
                 onAdd = { placa, desc, color -> vm.agregarVehiculo(user.id, placa, desc, color) },
                 onDelete = { id -> vm.eliminarVehiculo(user.id, id) }
+            )
+        }
+
+        // INE Photo card
+        item {
+            InePhotoCard(
+                ineUrl   = ineUrl,
+                onUpload = { ineLauncher.launch("image/*") }
             )
         }
 
@@ -255,6 +274,48 @@ private fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label
         Column(Modifier.weight(1f)) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+@Composable
+private fun InePhotoCard(ineUrl: String?, onUpload: () -> Unit) {
+    GuardianCard {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                "Foto de INE",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = onUpload) {
+                Icon(Icons.Default.Upload, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(if (ineUrl.isNullOrBlank()) "Subir foto" else "Actualizar")
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        if (!ineUrl.isNullOrBlank()) {
+            AsyncImage(
+                model            = ineUrl,
+                contentDescription = "Foto de INE",
+                contentScale     = ContentScale.Fit,
+                modifier         = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .heightIn(max = 160.dp)
+            )
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(Icons.Default.CheckCircle, null, tint = SecurityGreen, modifier = Modifier.size(14.dp))
+                Text("INE registrado — visible para el guardia al escanear tu placa", style = MaterialTheme.typography.labelSmall, color = SecurityGreen)
+            }
+        } else {
+            Text(
+                "Sin foto de INE. El guardia podrá verificar tu identidad si subes una foto de tu INE.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

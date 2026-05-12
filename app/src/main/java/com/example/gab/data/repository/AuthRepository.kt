@@ -51,16 +51,17 @@ class AuthRepository(private val context: Context) {
     }
 
     suspend fun reenviarVerificacion(email: String): Result<Unit> = runCatching {
-        val safeEmail = email.trim().replace("\"", "")
-        val baseUrl = SupabaseClientProvider.SUPABASE_URL
-        val anonKey = SupabaseClientProvider.SUPABASE_KEY
+        val safeEmail   = email.trim().replace("\"", "")
+        val baseUrl     = SupabaseClientProvider.SUPABASE_URL
+        val anonKey     = SupabaseClientProvider.SUPABASE_KEY
+        val redirectUrl = "$baseUrl/functions/v1/auth-confirm"
         withContext(Dispatchers.IO) {
             val conn = URL("$baseUrl/auth/v1/resend").openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.setRequestProperty("apikey", anonKey)
             conn.setRequestProperty("Content-Type", "application/json")
             conn.doOutput = true
-            val body = """{"type":"signup","email":"$safeEmail"}"""
+            val body = """{"type":"signup","email":"$safeEmail","options":{"redirect_to":"$redirectUrl"}}"""
             conn.outputStream.use { it.write(body.toByteArray()) }
             val code = conn.responseCode
             conn.disconnect()
@@ -162,12 +163,15 @@ class AuthRepository(private val context: Context) {
             // 3. Enviar email de confirmación al usuario recién creado
             withContext(Dispatchers.IO) {
                 runCatching {
+                    val redirectUrl = "$baseUrl/functions/v1/auth-confirm"
                     val conn = URL("$baseUrl/auth/v1/resend").openConnection() as HttpURLConnection
                     conn.requestMethod = "POST"
                     conn.setRequestProperty("apikey", anonKey)
                     conn.setRequestProperty("Content-Type", "application/json")
                     conn.doOutput = true
-                    conn.outputStream.use { it.write("""{"type":"signup","email":"$safeEmail"}""".toByteArray()) }
+                    conn.outputStream.use {
+                        it.write("""{"type":"signup","email":"$safeEmail","options":{"redirect_to":"$redirectUrl"}}""".toByteArray())
+                    }
                     conn.responseCode
                     conn.disconnect()
                 }

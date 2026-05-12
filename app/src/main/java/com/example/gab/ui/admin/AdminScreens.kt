@@ -83,9 +83,14 @@ fun AdminShell(user: AppUser, onLogout: () -> Unit) {
             }
             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                 DropdownMenuItem(
-                    text = { Text("Enviar recordatorios de pago") },
+                    text = { Text("Recordatorio push (FCM)") },
                     leadingIcon = { Icon(Icons.Default.Notifications, null) },
                     onClick = { vm.dispararRecordatorioPago(); showMenu = false }
+                )
+                DropdownMenuItem(
+                    text = { Text("Recordatorio por correo") },
+                    leadingIcon = { Icon(Icons.Default.Email, null) },
+                    onClick = { vm.dispararRecordatorioEmail(); showMenu = false }
                 )
                 DropdownMenuItem(
                     text = { Text("Cerrar sesión") },
@@ -184,7 +189,7 @@ fun AdminDashboard(user: AppUser, vm: AdminViewModel) {
             }
         }
 
-        items(avisos, key = { it.id }) { aviso ->
+        items(avisos, key = { it.id ?: 0 }) { aviso ->
             val (icon, color) = when (aviso.tono) {
                 "warn"    -> Icons.Default.Warning     to StatusWarning
                 "success" -> Icons.Default.CheckCircle to StatusSuccess
@@ -245,7 +250,7 @@ fun AdminDashboard(user: AppUser, vm: AdminViewModel) {
             text  = { Text("¿Eliminar el aviso \"${aviso.titulo}\"? Los residentes ya no lo verán.") },
             confirmButton = {
                 Button(
-                    onClick = { vm.eliminarAviso(aviso.id); avisoToDelete = null },
+                    onClick = { aviso.id?.let { vm.eliminarAviso(it) }; avisoToDelete = null },
                     colors  = ButtonDefaults.buttonColors(containerColor = StatusDanger)
                 ) { Text("Eliminar") }
             },

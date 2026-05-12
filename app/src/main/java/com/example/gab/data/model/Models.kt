@@ -49,6 +49,7 @@ data class Usuario(
     @SerialName("fkunidad") val fkUnidad: Int? = null,
     @SerialName("fcmtoken") val fcmToken: String? = null,
     @SerialName("fotourl") val fotoUrl: String? = null,
+    @SerialName("ineurl") val ineUrl: String? = null,
     @SerialName("estaactivo") val estaActivo: Boolean = true
 )
 
@@ -77,10 +78,11 @@ data class Reporte(
 
 @Serializable
 data class Aviso(
-    @SerialName("id") val id: Int = 0,
+    @SerialName("id") val id: Int? = null,
     @SerialName("titulo") val titulo: String = "",
     @SerialName("descripcion") val descripcion: String? = null,
-    @SerialName("tono") val tono: String = "primary"
+    @SerialName("tono") val tono: String = "primary",
+    @SerialName("fecha_creacion") val fechaCreacion: String? = null
 )
 
 @Serializable

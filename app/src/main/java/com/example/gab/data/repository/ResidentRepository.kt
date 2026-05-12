@@ -178,6 +178,12 @@ class ResidentRepository(private val context: Context) {
         )
     }
 
+    suspend fun getUsuario(userId: Int): Result<Usuario?> = runCatching {
+        client.postgrest["usuario"].select {
+            filter { eq("id", userId) }
+        }.decodeList<Usuario>().firstOrNull()
+    }
+
     suspend fun getVehiculos(userId: Int): Result<List<Vehiculo>> = runCatching {
         client.postgrest["vehiculo"].select {
             filter { eq("fk_usuario", userId) }
@@ -240,5 +246,31 @@ class ResidentRepository(private val context: Context) {
     suspend fun deletePase(paseId: Int): Result<Unit> = runCatching {
         client.postgrest["pase_visita"]
             .delete { filter { eq("id", paseId) } }
+    }
+
+    suspend fun subirFotoIne(userId: Int, uri: android.net.Uri): Result<String> = runCatching {
+        val bmp = android.graphics.BitmapFactory.decodeStream(
+            context.contentResolver.openInputStream(uri)
+        )
+        val bytes = if (bmp != null) {
+            var quality = 85
+            var out: java.io.ByteArrayOutputStream
+            do {
+                out = java.io.ByteArrayOutputStream()
+                bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, out)
+                quality -= 10
+            } while (out.size() > 600_000 && quality > 20)
+            out.toByteArray()
+        } else {
+            context.contentResolver.openInputStream(uri)?.readBytes()
+                ?: error("No se pudo leer la imagen")
+        }
+        val fileName = "ine_${userId}_${System.currentTimeMillis()}.jpg"
+        client.storage["fotos-ine"].upload(fileName, bytes) { upsert = true }
+        val publicUrl = client.storage["fotos-ine"].publicUrl(fileName)
+        client.postgrest["usuario"].update({ set("ineurl", publicUrl) }) {
+            filter { eq("id", userId) }
+        }
+        publicUrl
     }
 }

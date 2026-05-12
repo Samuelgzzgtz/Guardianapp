@@ -74,6 +74,9 @@ dependencies {
     // Accompanist Permissions
     implementation("com.google.accompanist:accompanist-permissions:0.36.0")
 
+    // Image loading
+    implementation("io.coil-kt:coil-compose:2.6.0")
+
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
     implementation("com.google.firebase:firebase-messaging-ktx")

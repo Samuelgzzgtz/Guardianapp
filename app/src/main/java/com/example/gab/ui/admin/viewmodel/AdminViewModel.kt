@@ -291,7 +291,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     fun eliminarAviso(avisoId: Int) {
         viewModelScope.launch {
             repo.eliminarAviso(avisoId)
-                .onSuccess { _avisos.value = _avisos.value.filter { it.id != avisoId } }
+                .onSuccess { _avisos.value = _avisos.value.filter { it.id != null && it.id != avisoId } }
                 .onFailure { _toastMessage.value = "Error al eliminar aviso" }
         }
     }
@@ -300,8 +300,18 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isLoading.value = true
             repo.dispararRecordatorioPago()
-                .onSuccess { count -> _toastMessage.value = "Recordatorios enviados: $count usuarios" }
-                .onFailure { _toastMessage.value = "Error al enviar recordatorios: ${it.message}" }
+                .onSuccess { count -> _toastMessage.value = "Notificaciones push enviadas: $count usuarios" }
+                .onFailure { _toastMessage.value = "Error al enviar push: ${it.message}" }
+            _isLoading.value = false
+        }
+    }
+
+    fun dispararRecordatorioEmail() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            repo.dispararRecordatorioEmail()
+                .onSuccess { count -> _toastMessage.value = "Correos de recordatorio enviados: $count usuarios" }
+                .onFailure { _toastMessage.value = "Error al enviar correos: ${it.message}" }
             _isLoading.value = false
         }
     }

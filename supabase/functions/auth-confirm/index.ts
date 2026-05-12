@@ -1,12 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+
+const SUPABASE_URL  = Deno.env.get("SUPABASE_URL")!
+const SUPABASE_ANON = Deno.env.get("SUPABASE_ANON_KEY")!
 
 serve(async (req) => {
-  const url = new URL(req.url)
-  const error    = url.searchParams.get("error")
+  const url       = new URL(req.url)
+  const error     = url.searchParams.get("error")
   const errorDesc = url.searchParams.get("error_description")
-  const code     = url.searchParams.get("code")   // PKCE flow: confirmación válida
+  const code      = url.searchParams.get("code")       // PKCE flow
+  const tokenHash = url.searchParams.get("token_hash") // OTP email flow
+  const type      = url.searchParams.get("type") ?? "signup"
 
-  // Error explícito enviado por Supabase (token inválido o expirado)
   if (error) {
     const msg = errorDesc
       ? decodeURIComponent(errorDesc.replace(/\+/g, " "))
@@ -16,20 +21,36 @@ serve(async (req) => {
     })
   }
 
-  // PKCE: Supabase redirigió aquí con un code → confirmación exitosa
+  // OTP / token_hash flow (email confirmation sent via /auth/v1/resend)
+  if (tokenHash) {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON)
+    const { error: otpError } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: type as "signup" | "recovery" | "email",
+    })
+    if (otpError) {
+      return new Response(buildPage("error", otpError.message), {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      })
+    }
+    return new Response(buildPage("success", ""), {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    })
+  }
+
+  // PKCE: code → confirmación exitosa (el SDK ya lo consumió via redirect)
   if (code) {
     return new Response(buildPage("success", ""), {
       headers: { "Content-Type": "text/html; charset=utf-8" },
     })
   }
 
-  // Sin parámetros: acceso directo o flujo implícito (JS detecta el hash)
+  // Sin parámetros válidos: detectar vía hash fragment (flujo implícito)
   return new Response(buildPage("detect", ""), {
     headers: { "Content-Type": "text/html; charset=utf-8" },
   })
 })
 
-// ── Page builder ──────────────────────────────────────────────────────────────
 function buildPage(state: "success" | "error" | "detect", errorMsg: string): string {
   return `<!DOCTYPE html>
 <html lang="es">
@@ -114,7 +135,6 @@ function buildPage(state: "success" | "error" | "detect", errorMsg: string): str
 </div>
 
 <script>
-  // Flujo implícito: Supabase pone el resultado en el hash del URL
   if (${state === "detect"}) {
     const hash = new URLSearchParams(window.location.hash.replace('#', ''));
     const accessToken = hash.get('access_token');
@@ -122,14 +142,11 @@ function buildPage(state: "success" | "error" | "detect", errorMsg: string): str
     const hashErrorDesc = hash.get('error_description');
 
     if (accessToken) {
-      // Confirmación exitosa (flujo implícito)
       setSuccess();
     } else if (hashError) {
-      // Error en el hash
       const desc = hashErrorDesc || 'El enlace expiró o ya fue usado.';
       setError(desc);
     } else {
-      // Acceso directo sin ningún parámetro válido
       setNoAuth();
     }
   }
@@ -154,7 +171,7 @@ function buildPage(state: "success" | "error" | "detect", errorMsg: string): str
     document.getElementById('iconWrap').className = 'icon-wrap gray';
     document.getElementById('iconWrap').innerHTML = \`${iconLock()}\`;
     document.getElementById('title').textContent = 'No autenticado';
-    document.getElementById('msg').textContent = 'Este enlace no es válido o ya fue utilizado. Si necesitas verificar tu correo, solicita un nuevo enlace desde la app.';
+    document.getElementById('msg').textContent = 'Este enlace no es válido o ya fue utilizado.';
     document.getElementById('btn').style.display = 'none';
   }
 </script>
@@ -162,7 +179,6 @@ function buildPage(state: "success" | "error" | "detect", errorMsg: string): str
 </html>`
 }
 
-// ── SVG icons ─────────────────────────────────────────────────────────────────
 function iconCheck() {
   return `<svg width="44" height="44" viewBox="0 0 44 44" fill="none">
     <circle cx="22" cy="22" r="22" fill="#4CAF50"/>

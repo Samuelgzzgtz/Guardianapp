@@ -256,4 +256,25 @@ class AdminRepository {
             Regex(""""processed"\s*:\s*(\d+)""").find(response)?.groupValues?.get(1)?.toInt() ?: 0
         }
     }
+
+    suspend fun dispararRecordatorioEmail(): Result<Int> = runCatching {
+        withContext(Dispatchers.IO) {
+            val serviceKey = SupabaseClientProvider.SUPABASE_SERVICE_KEY
+            val conn = URL("${SupabaseClientProvider.SUPABASE_URL}/functions/v1/recordatorio-email")
+                .openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Authorization", "Bearer $serviceKey")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.outputStream.bufferedWriter().use { it.write("{}") }
+            val code = conn.responseCode
+            val response = if (code in 200..299)
+                conn.inputStream.bufferedReader().readText()
+            else
+                conn.errorStream?.bufferedReader()?.readText() ?: ""
+            conn.disconnect()
+            if (code !in 200..299) error("Error al enviar emails ($code): $response")
+            Regex(""""processed"\s*:\s*(\d+)""").find(response)?.groupValues?.get(1)?.toInt() ?: 0
+        }
+    }
 }

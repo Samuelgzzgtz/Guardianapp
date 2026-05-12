@@ -61,6 +61,14 @@ class SecurityViewModel : ViewModel() {
     private val _autoRegistrado    = MutableStateFlow(false)
     val autoRegistrado: StateFlow<Boolean> = _autoRegistrado.asStateFlow()
 
+    // Residente cuya placa fue escaneada (con su foto de INE)
+    private val _residentePlacaInfo  = MutableStateFlow<Usuario?>(null)
+    val residentePlacaInfo: StateFlow<Usuario?> = _residentePlacaInfo.asStateFlow()
+
+    // Residentes que coinciden con el texto de INE escaneado
+    private val _residentesIneMatch  = MutableStateFlow<List<Usuario>>(emptyList())
+    val residentesIneMatch: StateFlow<List<Usuario>> = _residentesIneMatch.asStateFlow()
+
     private val _ultimoAccesoId    = MutableStateFlow(0)
 
     private val _isLoading         = MutableStateFlow(false)
@@ -217,7 +225,17 @@ class SecurityViewModel : ViewModel() {
             .filter { line -> line.all { it.isLetter() || it.isWhitespace() } && line.length > 4 }
             .maxByOrNull { it.length } ?: lineas.firstOrNull() ?: texto.take(50)
         _ineTextoReconocido.value = nombreEstimado
+        // Buscar en DB si el texto coincide con algún residente
+        if (nombreEstimado.length >= 3) {
+            viewModelScope.launch {
+                repo.buscarResidentePorNombre(nombreEstimado)
+                    .onSuccess { _residentesIneMatch.value = it }
+                    .onFailure { _residentesIneMatch.value = emptyList() }
+            }
+        }
     }
+
+    fun clearIneMatch() { _residentesIneMatch.value = emptyList() }
 
     fun confirmarVisitaIne(guardiaId: Int, nombre: String) {
         viewModelScope.launch {
@@ -225,6 +243,7 @@ class SecurityViewModel : ViewModel() {
                 .onSuccess {
                     _toastMessage.value = "Visitante registrado: $nombre"
                     _ineTextoReconocido.value = ""
+                    _residentesIneMatch.value = emptyList()
                     repo.getVisitas().onSuccess { _visitas.value = it }
                 }
                 .onFailure { _toastMessage.value = "Error al registrar visitante: ${it.message}" }
@@ -246,6 +265,7 @@ class SecurityViewModel : ViewModel() {
         _residenteParaPlaca.value = null
         _vehiculosResidente.value = emptyList()
         _placaResultado.value = null
+        _residentePlacaInfo.value = null
     }
 
     fun abrirCamaraPlaca()  { _showPlacaCamera.value = true }
@@ -276,6 +296,13 @@ class SecurityViewModel : ViewModel() {
                     guardiaId, "PLACA"
                 ).onSuccess { repo.getVisitas().onSuccess { _visitas.value = it } }
 
+                // Cargar datos del residente (nombre, foto INE) para mostrar en UI
+                val ownerUserId = vehiculoCorrecto.fkUsuario ?: residente?.id
+                if (ownerUserId != null) {
+                    repo.getResidentePorId(ownerUserId)
+                        .onSuccess { _residentePlacaInfo.value = it }
+                }
+
                 // Auto-register building access when resident was pre-selected and plate matches
                 if (residente != null) {
                     val hora = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
@@ -287,6 +314,8 @@ class SecurityViewModel : ViewModel() {
                         }
                         .onFailure { _toastMessage.value = "Error al registrar acceso: ${it.message}" }
                 }
+            } else {
+                _residentePlacaInfo.value = null
             }
         }
     }

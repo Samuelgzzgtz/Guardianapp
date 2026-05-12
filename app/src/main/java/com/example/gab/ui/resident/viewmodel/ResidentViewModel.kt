@@ -14,6 +14,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import com.example.gab.util.calcularRecargo
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class ResidentViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -52,6 +54,9 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
     private val _vehiculos = MutableStateFlow<List<Vehiculo>>(emptyList())
     val vehiculos: StateFlow<List<Vehiculo>> = _vehiculos.asStateFlow()
 
+    private val _ineUrl = MutableStateFlow<String?>(null)
+    val ineUrl: StateFlow<String?> = _ineUrl.asStateFlow()
+
     private val _pases = MutableStateFlow<List<PaseVisita>>(emptyList())
     val pases: StateFlow<List<PaseVisita>> = _pases.asStateFlow()
 
@@ -73,6 +78,7 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
             repo.getUsuarioUnidad(userId).onSuccess   { _unidad.value         = it }
             repo.getVehiculos(userId).onSuccess       { _vehiculos.value      = it }
             repo.getPases(userId).onSuccess           { _pases.value          = it }
+            repo.getUsuario(userId).onSuccess         { _ineUrl.value         = it?.ineUrl }
             _isLoading.value = false
         }
         startRealtime(userId)
@@ -260,6 +266,19 @@ class ResidentViewModel(application: Application) : AndroidViewModel(application
                     repo.getPases(userId).onSuccess { _pases.value = it }
                 }
                 .onFailure { _toastMessage.value = "Error al desactivar pase: ${it.message}" }
+        }
+    }
+
+    fun subirFotoIne(userId: Int, uri: Uri) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            repo.subirFotoIne(userId, uri)
+                .onSuccess { url ->
+                    _ineUrl.value = url
+                    _toastMessage.value = "Foto de INE guardada"
+                }
+                .onFailure { _toastMessage.value = "Error al subir INE: ${it.message}" }
+            _isLoading.value = false
         }
     }
 
