@@ -6,6 +6,7 @@ import com.example.gab.data.model.Usuario
 import com.example.gab.data.remote.SupabaseClientProvider
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.auth.user.UserSession
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
@@ -191,7 +192,7 @@ class AuthRepository(private val context: Context) {
 
     // Returns new access token, or null if refresh failed (token expired / invalid)
     suspend fun refreshSession(refreshToken: String): String? = runCatching {
-        withContext(Dispatchers.IO) {
+        val (newAccess, newRefresh) = withContext(Dispatchers.IO) {
             val conn = URL("${SupabaseClientProvider.SUPABASE_URL}/auth/v1/token?grant_type=refresh_token")
                 .openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
@@ -201,22 +202,33 @@ class AuthRepository(private val context: Context) {
             conn.doInput  = true
             conn.outputStream.use { it.write("""{"refresh_token":"$refreshToken"}""".toByteArray()) }
             val code = conn.responseCode
-            if (code !in 200..299) { conn.disconnect(); return@withContext null }
-            val body       = conn.inputStream.bufferedReader().readText()
+            if (code !in 200..299) { conn.disconnect(); return@withContext Pair("", "") }
+            val body = conn.inputStream.bufferedReader().readText()
             conn.disconnect()
-            val newAccess  = body.substringAfter("\"access_token\":\"").substringBefore("\"")
-            val newRefresh = body.substringAfter("\"refresh_token\":\"").substringBefore("\"")
-            val userId = session.userId.firstOrNull()
-            val name   = session.userName.firstOrNull() ?: ""
-            val role   = session.userRole.firstOrNull() ?: 1
-            if (userId != null && newAccess.isNotBlank()) {
-                session.saveSession(
-                    userId = userId, name = name, role = role, unit = "",
-                    token = newAccess, refreshToken = newRefresh
-                )
-            }
-            newAccess.takeIf { it.isNotBlank() }
+            Pair(
+                body.substringAfter("\"access_token\":\"").substringBefore("\""),
+                body.substringAfter("\"refresh_token\":\"").substringBefore("\"")
+            )
         }
+        if (newAccess.isBlank()) return@runCatching null
+        val userId = session.userId.firstOrNull()
+        val name   = session.userName.firstOrNull() ?: ""
+        val role   = session.userRole.firstOrNull() ?: 1
+        if (userId != null) {
+            session.saveSession(
+                userId = userId, name = name, role = role, unit = "",
+                token = newAccess, refreshToken = newRefresh
+            )
+        }
+        // Inject token into Supabase SDK so Realtime connects with user JWT (not anon key).
+        // Without this, RLS blocks all realtime events after session restore from DataStore.
+        runCatching {
+            client.auth.importSession(
+                UserSession(accessToken = newAccess, tokenType = "bearer",
+                            expiresIn = 3600, refreshToken = newRefresh)
+            )
+        }
+        newAccess
     }.getOrNull()
 
     suspend fun saveFcmToken(userId: Int, fcmToken: String) = runCatching {
