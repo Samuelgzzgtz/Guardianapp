@@ -77,6 +77,9 @@ fun AdminShell(user: AppUser, onLogout: () -> Unit) {
         navItems = navItems,
         topBarTitle = "Administración",
         topBarActions = {
+            IconButton(onClick = { vm.loadAll() }) {
+                Icon(Icons.Default.Refresh, contentDescription = "Actualizar")
+            }
             var showMenu by remember { mutableStateOf(false) }
             IconButton(onClick = { showMenu = true }) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Más opciones")
