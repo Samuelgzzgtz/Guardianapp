@@ -1,6 +1,7 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package com.example.gab.ui.resident
 
+import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,9 +13,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.gab.data.model.Vehiculo
 import com.example.gab.ui.common.*
 import com.example.gab.ui.navigation.AppUser
 import com.example.gab.ui.resident.viewmodel.ResidentViewModel
@@ -22,14 +26,20 @@ import com.example.gab.ui.theme.*
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.journeyapps.barcodescanner.BarcodeEncoder
+import java.io.File
+import java.io.FileOutputStream
 
 @Composable
 fun ResidentPassesScreen(user: AppUser, vm: ResidentViewModel) {
-    val pases     by vm.pases.collectAsStateWithLifecycle()
-    val isLoading by vm.isLoading.collectAsStateWithLifecycle()
+    val pases      by vm.pases.collectAsStateWithLifecycle()
+    val vehiculos  by vm.vehiculos.collectAsStateWithLifecycle()
+    val isLoading  by vm.isLoading.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(user.id) { vm.loadPases(user.id) }
+    LaunchedEffect(user.id) {
+        vm.loadPases(user.id)
+        vm.cargarVehiculos(user.id)
+    }
 
     Scaffold(
         floatingActionButton = {
@@ -58,9 +68,7 @@ fun ResidentPassesScreen(user: AppUser, vm: ResidentViewModel) {
             }
 
             if (pases.isEmpty() && !isLoading) {
-                item {
-                    EmptyState("No tienes pases activos. Crea uno con el botón +")
-                }
+                item { EmptyState("No tienes pases activos. Crea uno con el botón +") }
             }
 
             items(pases) { pase ->
@@ -74,6 +82,7 @@ fun ResidentPassesScreen(user: AppUser, vm: ResidentViewModel) {
 
     if (showCreateDialog) {
         CrearPaseDialog(
+            vehiculos = vehiculos,
             onDismiss = { showCreateDialog = false },
             onSubmit = { nombre, modelo, color, placa, vigencia, usos, expiracion ->
                 vm.crearPase(user.id, nombre, modelo, color, placa, vigencia, usos, expiracion)
@@ -85,9 +94,10 @@ fun ResidentPassesScreen(user: AppUser, vm: ResidentViewModel) {
 
 @Composable
 private fun PaseCard(pase: com.example.gab.data.model.PaseVisita, onDesactivar: () -> Unit) {
+    val context = LocalContext.current
     val qrBitmap = remember(pase.id) {
         runCatching {
-            val matrix = MultiFormatWriter().encode("pase:${pase.id}", BarcodeFormat.QR_CODE, 200, 200)
+            val matrix = MultiFormatWriter().encode("pase:${pase.id}", BarcodeFormat.QR_CODE, 512, 512)
             BarcodeEncoder().createBitmap(matrix)
         }.getOrNull()
     }
@@ -113,19 +123,51 @@ private fun PaseCard(pase: com.example.gab.data.model.PaseVisita, onDesactivar: 
                     Image(
                         bitmap = bmp.asImageBitmap(),
                         contentDescription = "QR del pase",
-                        modifier = Modifier.size(150.dp)
+                        modifier = Modifier.size(180.dp)
                     )
                 }
             }
 
-            if (pase.activo) {
-                TextButton(
-                    onClick = onDesactivar,
-                    colors = ButtonDefaults.textButtonColors(contentColor = StatusDanger)
-                ) {
-                    Icon(Icons.Default.Cancel, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Desactivar pase")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Share QR button
+                if (qrBitmap != null && pase.activo) {
+                    OutlinedButton(
+                        onClick = {
+                            runCatching {
+                                val dir = File(context.cacheDir, "shared_images").also { it.mkdirs() }
+                                val file = File(dir, "pase_${pase.id}.png")
+                                FileOutputStream(file).use { qrBitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "image/png"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    putExtra(Intent.EXTRA_TEXT, "Aquí está mi pase de visita para ${pase.nombreVisitante}. Muéstralo al guardia de seguridad.")
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Compartir pase QR"))
+                            }
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ResidentBlue)
+                    ) {
+                        Icon(Icons.Default.Share, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Compartir")
+                    }
+                }
+
+                if (pase.activo) {
+                    TextButton(
+                        onClick = onDesactivar,
+                        colors = ButtonDefaults.textButtonColors(contentColor = StatusDanger)
+                    ) {
+                        Icon(Icons.Default.Cancel, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Desactivar")
+                    }
                 }
             }
         }
@@ -134,6 +176,7 @@ private fun PaseCard(pase: com.example.gab.data.model.PaseVisita, onDesactivar: 
 
 @Composable
 private fun CrearPaseDialog(
+    vehiculos: List<Vehiculo>,
     onDismiss: () -> Unit,
     onSubmit: (nombre: String, modelo: String?, color: String?, placa: String?, vigencia: String, usos: Int, expiracion: String?) -> Unit
 ) {
@@ -157,6 +200,38 @@ private fun CrearPaseDialog(
                     label = { Text("Nombre del visitante *") },
                     modifier = Modifier.fillMaxWidth(), singleLine = true
                 )
+
+                // Pre-fill vehicle from registered vehicles
+                if (vehiculos.isNotEmpty()) {
+                    Text("Vehículo del visitante:", style = MaterialTheme.typography.labelMedium)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        vehiculos.forEach { v ->
+                            FilterChip(
+                                selected = placa == v.placa,
+                                onClick = {
+                                    if (placa == v.placa) {
+                                        placa = ""; modelo = ""; color = ""
+                                    } else {
+                                        placa  = v.placa
+                                        modelo = v.descripcion ?: ""
+                                        color  = v.color ?: ""
+                                    }
+                                },
+                                label = { Text(v.placa, style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = { Icon(Icons.Default.DirectionsCar, null, modifier = Modifier.size(14.dp)) }
+                            )
+                        }
+                    }
+                    Text(
+                        "O ingrésalo manualmente:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
                 OutlinedTextField(
                     value = modelo, onValueChange = { modelo = it },
                     label = { Text("Modelo de vehículo") },
